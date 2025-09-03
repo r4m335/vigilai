@@ -7,6 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from .permissions import IsOwnerOrReadOnly
 from .serializers import CaseSerializer
+from rest_framework import generics
+from django.contrib.auth.models import User
+from .serializers import UserRegisterSerializer
 from rest_framework import permissions
 from .permissions import (
     IsInvestigator,
@@ -15,6 +18,13 @@ from .permissions import (
     IsCitizenRestricted,
     IsChiefReadOnly,
 )
+
+
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserRegisterSerializer
+    permission_classes = [AllowAny]
 
 
 class CaseViewSet(viewsets.ModelViewSet):

@@ -1,5 +1,17 @@
 from rest_framework import serializers
 from .models import Case, Evidence, Witness, CriminalRecord
+from django.contrib.auth.models import User
+
+class UserRegisterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["username", "email", "password"]
+        extra_kwargs = {"password": {"write_only": True}}
+
+    def create(self, validated_data):
+        # use create_user to hash the password
+        user = User.objects.create_user(**validated_data)
+        return user
 
 class CaseSerializer(serializers.ModelSerializer):
     class Meta:
