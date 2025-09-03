@@ -4,15 +4,14 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
 import PrivateRoute from './components/PrivateRoute';
-import NavBar from './components/NavBar';
 import AppRoutes from './routes/AppRoutes';
+import './Auth.css';
 
 
 
 function App() {
   return (
     <>
-      <NavBar />
       <Router>
         <Routes>
           <Route path="*" element={<AppRoutes />} />
