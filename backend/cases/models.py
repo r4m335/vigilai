@@ -1,10 +1,21 @@
 from django.db import models
+from django.contrib.auth.models import User
+from django.conf import settings
+
 
 class Case(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     date_reported = models.DateField(auto_now_add=True)
     status = models.CharField(max_length=50, default="Open")
+    owner = models.ForeignKey(
+    settings.AUTH_USER_MODEL,
+    related_name='cases',
+    null=False,
+    blank=False,
+    on_delete=models.CASCADE
+    )
+
 
     def __str__(self):
         return f"{self.title} - {self.status}"
