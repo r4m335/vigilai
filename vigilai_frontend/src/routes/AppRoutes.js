@@ -1,6 +1,6 @@
 // src/routes/AppRoutes.js
 import React from 'react';
-import { BrowserRouter as Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Home from '../pages/Home';
 import Dashboard from '../pages/cases/Dashboard';
 import CaseForm from '../pages/cases/CaseForm';
