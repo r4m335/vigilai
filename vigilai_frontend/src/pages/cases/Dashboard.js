@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button } from 'react-bootstrap';
+import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
-import { fetchCases, deleteCase } from './CaseService';
+import { 
+  fetchCases, 
+  deleteCase, 
+  fetchEvidence, 
+  fetchWitnesses, 
+  fetchCriminalRecords 
+} from './CaseService';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
+  const [caseDetails, setCaseDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedCase, setExpandedCase] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,6 +27,11 @@ export default function Dashboard() {
     }
 
     // Fetch cases data
+    loadCases();
+  }, [navigate]);
+
+  const loadCases = () => {
+    setLoading(true);
     fetchCases()
       .then(response => {
         setCases(response.data);
@@ -37,7 +49,29 @@ export default function Dashboard() {
         }
         setLoading(false);
       });
-  }, [navigate]);
+  };
+
+  const loadCaseDetails = async (caseId) => {
+    try {
+      const [evidenceRes, witnessesRes, recordsRes] = await Promise.all([
+        fetchEvidence(caseId),
+        fetchWitnesses(caseId),
+        fetchCriminalRecords(caseId)
+      ]);
+
+      setCaseDetails(prev => ({
+        ...prev,
+        [caseId]: {
+          evidence: evidenceRes.data,
+          witnesses: witnessesRes.data,
+          criminalRecords: recordsRes.data
+        }
+      }));
+    } catch (err) {
+      console.error('Error loading case details:', err);
+      setError('Failed to load case details.');
+    }
+  };
 
   const handleDelete = (id) => {
     if (window.confirm('Are you sure you want to delete this case?')) {
@@ -45,6 +79,10 @@ export default function Dashboard() {
         .then(() => {
           // Remove the case from the local state
           setCases(cases.filter(c => c.id !== id));
+          // Remove from caseDetails if exists
+          const newCaseDetails = { ...caseDetails };
+          delete newCaseDetails[id];
+          setCaseDetails(newCaseDetails);
         })
         .catch(err => {
           console.error('Error deleting case:', err);
@@ -53,10 +91,33 @@ export default function Dashboard() {
     }
   };
 
+  const handleExpandCase = (caseId) => {
+    if (expandedCase === caseId) {
+      setExpandedCase(null);
+    } else {
+      setExpandedCase(caseId);
+      if (!caseDetails[caseId]) {
+        loadCaseDetails(caseId);
+      }
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     navigate('/login');
+  };
+
+  const getStatusBadge = (status) => {
+    const variant = {
+      'Open': 'success',
+      'In Progress': 'primary',
+      'Pending': 'warning',
+      'Closed': 'secondary',
+      'Reopened': 'info'
+    }[status] || 'secondary';
+    
+    return <Badge bg={variant}>{status}</Badge>;
   };
 
   if (loading) {
@@ -116,54 +177,124 @@ export default function Dashboard() {
 
         <Row className="justify-content-center">
           <Col lg={10}>
-            <Card className="border-0 shadow-sm auth-card">
-              <Card.Body className="p-4">
-                {cases.length > 0 ? (
-                  <Table hover responsive className="mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>ID</th>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Created On</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cases.map(c => (
-                        <tr key={c.id}>
-                          <td className="fw-bold">#{c.id}</td>
-                          <td>{c.title}</td>
-                          <td>
-                            <span className={`badge ${
-                              c.status === 'Open' ? 'bg-success' : 
-                              c.status === 'Closed' ? 'bg-secondary' : 
-                              c.status === 'Pending' ? 'bg-warning' : 'bg-info'
-                            }`}>
-                              {c.status}
-                            </span>
-                          </td>
-                          <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                          <td>
-                            <Link 
-                              to={`/cases/edit/${c.id}`} 
-                              className="btn btn-sm btn-outline-primary me-1"
-                            >
-                              Edit
-                            </Link>
-                            <Button 
-                              variant="outline-danger" 
-                              size="sm"
-                              onClick={() => handleDelete(c.id)}
-                            >
-                              Delete
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                ) : (
+            {cases.length > 0 ? (
+              <Accordion activeKey={expandedCase}>
+                {cases.map(c => (
+                  <Card key={c.id} className="border-0 shadow-sm auth-card mb-3">
+                    <Card.Body className="p-4">
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div>
+                          <h5 className="fw-bold">#{c.crime_id} - {c.title || 'Untitled Case'}</h5>
+                          <p className="text-muted mb-2">{c.description}</p>
+                          <div className="d-flex gap-2 mb-2">
+                            {getStatusBadge(c.status)}
+                            <Badge bg="light" text="dark">
+                              {new Date(c.date).toLocaleDateString()}
+                            </Badge>
+                            <Badge bg="light" text="dark">
+                              {c.location}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="d-flex gap-2">
+                          <Link 
+                            to={`/cases/edit/${c.id}`} 
+                            className="btn btn-sm btn-outline-primary"
+                          >
+                            Edit
+                          </Link>
+                          <Button 
+                            variant="outline-danger" 
+                            size="sm"
+                            onClick={() => handleDelete(c.id)}
+                          >
+                            Delete
+                          </Button>
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => handleExpandCase(c.id)}
+                          >
+                            {expandedCase === c.id ? 'Collapse' : 'View Details'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <Accordion.Collapse eventKey={c.id}>
+                        <div className="mt-4">
+                          {/* Evidence Section */}
+                          <h6 className="fw-bold mb-3">Evidence</h6>
+                          {caseDetails[c.id]?.evidence?.length > 0 ? (
+                            <Table striped bordered responsive size="sm" className="mb-4">
+                              <thead>
+                                <tr>
+                                  <th>Type of Crime</th>
+                                  <th>Details</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {caseDetails[c.id].evidence.map(evidence => (
+                                  <tr key={evidence.id}>
+                                    <td>{evidence.type_of_crime}</td>
+                                    <td>{evidence.details}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          ) : (
+                            <p className="text-muted mb-4">No evidence recorded.</p>
+                          )}
+
+                          {/* Witnesses Section */}
+                          <h6 className="fw-bold mb-3">Witnesses</h6>
+                          {caseDetails[c.id]?.witnesses?.length > 0 ? (
+                            <Table striped bordered responsive size="sm" className="mb-4">
+                              <thead>
+                                <tr>
+                                  <th>Statement</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {caseDetails[c.id].witnesses.map(witness => (
+                                  <tr key={witness.id}>
+                                    <td>{witness.statement}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          ) : (
+                            <p className="text-muted mb-4">No witness statements recorded.</p>
+                          )}
+
+                          {/* Criminal Records Section */}
+                          <h6 className="fw-bold mb-3">Criminal Records</h6>
+                          {caseDetails[c.id]?.criminalRecords?.length > 0 ? (
+                            <Table striped bordered responsive size="sm" className="mb-4">
+                              <thead>
+                                <tr>
+                                  <th>Details of Past Offense</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {caseDetails[c.id].criminalRecords.map(record => (
+                                  <tr key={record.id}>
+                                    <td>{record.details}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </Table>
+                          ) : (
+                            <p className="text-muted">No criminal records recorded.</p>
+                          )}
+                        </div>
+                      </Accordion.Collapse>
+                    </Card.Body>
+                  </Card>
+                ))}
+              </Accordion>
+            ) : (
+              <Card className="border-0 shadow-sm auth-card">
+                <Card.Body className="p-4">
                   <div className="text-center py-5">
                     <i className="bi bi-folder-x text-muted" style={{ fontSize: '3rem' }}></i>
                     <h5 className="mt-3 text-muted">No cases found</h5>
@@ -172,52 +303,54 @@ export default function Dashboard() {
                       Create New Case
                     </Link>
                   </div>
-                )}
-              </Card.Body>
-            </Card>
+                </Card.Body>
+              </Card>
+            )}
           </Col>
         </Row>
 
         {/* Stats Cards */}
-        <Row className="mt-5 justify-content-center">
-          <Col lg={10}>
-            <h5 className="fw-bold mb-4">Case Overview</h5>
-            <Row>
-              <Col md={3} className="mb-3">
-                <Card className="border-0 shadow-sm text-center">
-                  <Card.Body>
-                    <h3 className="fw-bold text-primary">{cases.filter(c => c.status === 'Open').length}</h3>
-                    <p className="text-muted mb-0">Open Cases</p>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col md={3} className="mb-3">
-                <Card className="border-0 shadow-sm text-center">
-                  <Card.Body>
-                    <h3 className="fw-bold text-warning">{cases.filter(c => c.status === 'Pending').length}</h3>
-                    <p className="text-muted mb-0">Pending Cases</p>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col md={3} className="mb-3">
-                <Card className="border-0 shadow-sm text-center">
-                  <Card.Body>
-                    <h3 className="fw-bold text-success">{cases.filter(c => c.status === 'Closed').length}</h3>
-                    <p className="text-muted mb-0">Closed Cases</p>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col md={3} className="mb-3">
-                <Card className="border-0 shadow-sm text-center">
-                  <Card.Body>
-                    <h3 className="fw-bold text-info">{cases.length}</h3>
-                    <p className="text-muted mb-0">Total Cases</p>
-                  </Card.Body>
-                </Card>
-              </Col>
-            </Row>
-          </Col>
-        </Row>
+        {cases.length > 0 && (
+          <Row className="mt-5 justify-content-center">
+            <Col lg={10}>
+              <h5 className="fw-bold mb-4">Case Overview</h5>
+              <Row>
+                <Col md={3} className="mb-3">
+                  <Card className="border-0 shadow-sm text-center">
+                    <Card.Body>
+                      <h3 className="fw-bold text-primary">{cases.filter(c => c.status === 'Open').length}</h3>
+                      <p className="text-muted mb-0">Open Cases</p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={3} className="mb-3">
+                  <Card className="border-0 shadow-sm text-center">
+                    <Card.Body>
+                      <h3 className="fw-bold text-warning">{cases.filter(c => c.status === 'Pending').length}</h3>
+                      <p className="text-muted mb-0">Pending Cases</p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={3} className="mb-3">
+                  <Card className="border-0 shadow-sm text-center">
+                    <Card.Body>
+                      <h3 className="fw-bold text-success">{cases.filter(c => c.status === 'Closed').length}</h3>
+                      <p className="text-muted mb-0">Closed Cases</p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={3} className="mb-3">
+                  <Card className="border-0 shadow-sm text-center">
+                    <Card.Body>
+                      <h3 className="fw-bold text-info">{cases.length}</h3>
+                      <p className="text-muted mb-0">Total Cases</p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Col>
+          </Row>
+        )}
       </Container>
     </div>
   );

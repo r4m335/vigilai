@@ -1,8 +1,11 @@
-// src/pages/CaseForm.jsx
+// src/cases/CaseForm.js
 import React, { useState, useEffect } from 'react';
-import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar } from 'react-bootstrap';
+import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar, Tabs, Tab } from 'react-bootstrap';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { fetchCase, createCase, updateCase } from './CaseService';
+import EvidenceForm from './EvidenceForm';
+import WitnessForm from './WitnessForm';
+import CriminalRecordForm from './CriminalRecordForm';
 
 export default function CaseForm() {
   const { id } = useParams();
@@ -10,15 +13,17 @@ export default function CaseForm() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    title: '',
+    crime_id: '',
     description: '',
-    status: 'Open', // Default status
+    date: '',
+    location: '',
+    status: 'Open',
   });
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('case-details');
 
-  // Status options for dropdown
   const statusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
 
   // Fetch existing case data if in edit mode
@@ -28,8 +33,10 @@ export default function CaseForm() {
       fetchCase(id)
         .then(res => {
           setFormData({
-            title: res.data.title || '',
+            crime_id: res.data.crime_id || '',
             description: res.data.description || '',
+            date: res.data.date || '',
+            location: res.data.location || '',
             status: res.data.status || 'Open',
           });
           setLoading(false);
@@ -57,8 +64,14 @@ export default function CaseForm() {
       : createCase(formData);
 
     request
-      .then(() => {
-        navigate('/dashboard');
+      .then((response) => {
+        if (!isEdit) {
+          // If creating a new case, navigate to the edit page with the new ID
+          navigate(`/cases/edit/${response.data.id}`);
+        } else {
+          setError('Case updated successfully!');
+          setTimeout(() => setError(null), 3000);
+        }
       })
       .catch(err => {
         console.error('Submission error:', err);
@@ -98,7 +111,6 @@ export default function CaseForm() {
 
   return (
     <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
-      {/* Navigation Bar */}
       <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
@@ -113,91 +125,139 @@ export default function CaseForm() {
         </Container>
       </Navbar>
 
-      <Container className="py-5">
+      <Container className="py-4">
         <Row className="justify-content-center">
-          <Col lg={8} xl={6}>
+          <Col lg={10}>
+            <div className="text-center mb-4">
+              <h3 className="fw-bold text-dark">{isEdit ? 'Edit Case' : 'Add New Case'}</h3>
+              <p className="text-muted">
+                {isEdit ? 'Manage case details and related information' : 'Create a new case to track'}
+              </p>
+            </div>
+
+            {error && (
+              <Alert variant={error.includes('success') ? 'success' : 'danger'} className="text-center">
+                {error}
+              </Alert>
+            )}
+
             <Card className="border-0 shadow-sm auth-card">
               <Card.Body className="p-4">
-                <div className="text-center mb-4">
-                  <h3 className="fw-bold text-dark">{isEdit ? 'Edit Case' : 'Add New Case'}</h3>
-                  <p className="text-muted">
-                    {isEdit ? 'Update the details of your case' : 'Create a new case to track'}
-                  </p>
-                </div>
+                <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-4">
+                  <Tab eventKey="case-details" title="Case Details">
+                    <Form onSubmit={handleSubmit}>
+                      <Row>
+                        <Col md={6}>
+                          <Form.Group controlId="crimeId" className="mb-3">
+                            <Form.Label className="fw-semibold">Crime ID</Form.Label>
+                            <Form.Control
+                              name="crime_id"
+                              type="text"
+                              placeholder="Enter crime ID"
+                              value={formData.crime_id}
+                              onChange={handleChange}
+                              required
+                              className="auth-input"
+                            />
+                          </Form.Group>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Group controlId="caseDate" className="mb-3">
+                            <Form.Label className="fw-semibold">Date</Form.Label>
+                            <Form.Control
+                              name="date"
+                              type="date"
+                              value={formData.date}
+                              onChange={handleChange}
+                              required
+                              className="auth-input"
+                            />
+                          </Form.Group>
+                        </Col>
+                      </Row>
 
-                {error && (
-                  <Alert variant="danger" className="text-center">
-                    {error}
-                  </Alert>
-                )}
+                      <Form.Group controlId="caseLocation" className="mb-3">
+                        <Form.Label className="fw-semibold">Location</Form.Label>
+                        <Form.Control
+                          name="location"
+                          type="text"
+                          placeholder="Enter crime location"
+                          value={formData.location}
+                          onChange={handleChange}
+                          required
+                          className="auth-input"
+                        />
+                      </Form.Group>
 
-                <Form onSubmit={handleSubmit}>
-                  <Form.Group controlId="caseTitle" className="mb-3">
-                    <Form.Label className="fw-semibold">Title</Form.Label>
-                    <Form.Control
-                      name="title"
-                      type="text"
-                      placeholder="Enter case title"
-                      value={formData.title}
-                      onChange={handleChange}
-                      required
-                      className="auth-input"
-                    />
-                  </Form.Group>
+                      <Form.Group controlId="caseDescription" className="mb-3">
+                        <Form.Label className="fw-semibold">Description</Form.Label>
+                        <Form.Control
+                          name="description"
+                          as="textarea"
+                          rows={4}
+                          placeholder="Enter case description"
+                          value={formData.description}
+                          onChange={handleChange}
+                          className="auth-input"
+                        />
+                      </Form.Group>
 
-                  <Form.Group controlId="caseDescription" className="mb-3">
-                    <Form.Label className="fw-semibold">Description</Form.Label>
-                    <Form.Control
-                      name="description"
-                      as="textarea"
-                      rows={4}
-                      placeholder="Enter case description"
-                      value={formData.description}
-                      onChange={handleChange}
-                      className="auth-input"
-                    />
-                  </Form.Group>
+                      <Form.Group controlId="caseStatus" className="mb-4">
+                        <Form.Label className="fw-semibold">Status</Form.Label>
+                        <Form.Select
+                          name="status"
+                          value={formData.status}
+                          onChange={handleChange}
+                          className="auth-input"
+                        >
+                          {statusOptions.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
 
-                  <Form.Group controlId="caseStatus" className="mb-4">
-                    <Form.Label className="fw-semibold">Status</Form.Label>
-                    <Form.Select
-                      name="status"
-                      value={formData.status}
-                      onChange={handleChange}
-                      className="auth-input"
-                    >
-                      {statusOptions.map(option => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
+                      <div className="d-grid gap-2">
+                        <Button 
+                          type="submit" 
+                          disabled={submitting}
+                          className="auth-button py-2 fw-bold"
+                          size="lg"
+                        >
+                          {submitting ? (
+                            <>
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              {isEdit ? 'Updating...' : 'Creating...'}
+                            </>
+                          ) : (
+                            isEdit ? 'Update Case' : 'Create Case'
+                          )}
+                        </Button>
+                      </div>
+                    </Form>
+                  </Tab>
 
-                  <div className="d-grid gap-2">
-                    <Button 
-                      type="submit" 
-                      disabled={submitting}
-                      className="auth-button py-2 fw-bold"
-                      size="lg"
-                    >
-                      {submitting ? (
-                        <>
-                          <Spinner animation="border" size="sm" className="me-2" />
-                          {isEdit ? 'Updating...' : 'Creating...'}
-                        </>
-                      ) : (
-                        isEdit ? 'Update Case' : 'Create Case'
-                      )}
-                    </Button>
-                    
-                    <Button 
-                      variant="outline-secondary" 
-                      onClick={() => navigate('/dashboard')}
-                      disabled={submitting}
-                    >
-                      Cancel
-                    </Button>
+                  {isEdit && (
+                    <>
+                      <Tab eventKey="evidence" title="Evidence">
+                        <EvidenceForm caseId={id} />
+                      </Tab>
+                      <Tab eventKey="witnesses" title="Witnesses">
+                        <WitnessForm caseId={id} />
+                      </Tab>
+                      <Tab eventKey="criminal-records" title="Criminal Records">
+                        <CriminalRecordForm caseId={id} />
+                      </Tab>
+                    </>
+                  )}
+                </Tabs>
+
+                {!isEdit && (
+                  <div className="text-center mt-3">
+                    <p className="text-muted">
+                      After creating the case, you can add evidence, witnesses, and criminal records.
+                    </p>
                   </div>
-                </Form>
+                )}
               </Card.Body>
             </Card>
           </Col>
