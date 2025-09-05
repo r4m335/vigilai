@@ -28,22 +28,12 @@ class RegisterView(generics.CreateAPIView):
 
 
 class CaseViewSet(viewsets.ModelViewSet):
-    queryset = Case.objects.all()
+    queryset = Case.objects.all().order_by('-date')
     serializer_class = CaseSerializer
-    permission_classes = [
-        permissions.IsAuthenticatedOrReadOnly,
-        IsOwnerOrReadOnly, IsInvestigator | IsChiefReadOnly | IsProsecutorReadOnly | IsCitizenRestricted
-    ]
-
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
 
 class EvidenceViewSet(viewsets.ModelViewSet):
     queryset = Evidence.objects.all()
     serializer_class = EvidenceSerializer
-    permission_classes = [
-        IsInvestigator | IsClerkForEvidenceOnly | IsChiefReadOnly
-    ]
 
 class WitnessViewSet(viewsets.ModelViewSet):
     queryset = Witness.objects.all()
@@ -52,7 +42,7 @@ class WitnessViewSet(viewsets.ModelViewSet):
 class CriminalRecordViewSet(viewsets.ModelViewSet):
     queryset = CriminalRecord.objects.all()
     serializer_class = CriminalRecordSerializer
-
+    
 class PublicEndpoint(APIView):
     permission_classes = [AllowAny]
 
