@@ -7,14 +7,75 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState([]);
   const navigate = useNavigate();
+
+  // Password validation function
+  const validatePassword = (password) => {
+    const errors = [];
+    
+    // Check minimum length
+    if (password.length < 8) {
+      errors.push('At least 8 characters');
+    }
+    
+    // Check for uppercase letters
+    if (!/[A-Z]/.test(password)) {
+      errors.push('At least one uppercase letter (A-Z)');
+    }
+    
+    // Check for lowercase letters
+    if (!/[a-z]/.test(password)) {
+      errors.push('At least one lowercase letter (a-z)');
+    }
+    
+    // Check for numbers
+    if (!/[0-9]/.test(password)) {
+      errors.push('At least one number (0-9)');
+    }
+    
+    // Check for special characters
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      errors.push('At least one special character (!@#$%^&* etc.)');
+    }
+    
+    // Check for common dictionary words (basic check)
+    const commonWords = ['password', '123456', 'qwerty', 'letmein', 'welcome', 'admin', 'monkey'];
+    if (commonWords.some(word => password.toLowerCase().includes(word))) {
+      errors.push('Avoid common words and patterns');
+    }
+    
+    return errors;
+  };
+
+  const handlePasswordChange = (e) => {
+    const newPassword = e.target.value;
+    setPassword(newPassword);
+    setPasswordErrors(validatePassword(newPassword));
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError(null);
+    
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    
+    // Validate password strength
+    const errors = validatePassword(password);
+    if (errors.length > 0) {
+      setError('Please fix the password requirements below');
+      setPasswordErrors(errors);
+      return;
+    }
+    
     setLoading(true);
     
     try {
@@ -24,12 +85,14 @@ function Register() {
         navigate('/login');
       }, 2000);
     } catch (err) {
-      setError('Registration failed. Please try again.');
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
       setSuccess(false);
     } finally {
       setLoading(false);
     }
   };
+
+  const isPasswordValid = passwordErrors.length === 0 && password.length > 0;
 
   return (
     <Container className="d-flex vh-100 justify-content-center align-items-center auth-container">
@@ -70,27 +133,65 @@ function Register() {
                 />
               </Form.Group>
 
-              <Form.Group className="mb-4">
+              <Form.Group className="mb-3">
                 <Form.Label>Password</Form.Label>
                 <Form.Control
                   type="password"
-                  placeholder="Create a password"
+                  placeholder="Create a strong password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={handlePasswordChange}
                   required
-                  minLength={6}
+                  minLength={8}
                   className="auth-input"
+                  isInvalid={password.length > 0 && !isPasswordValid}
                 />
                 <Form.Text className="text-muted">
-                  Password must be at least 6 characters long.
+                  Password must contain:
                 </Form.Text>
+                <div className="small text-muted mt-1">
+                  <ul className="mb-1">
+                    <li className={password.length >= 8 ? 'text-success' : ''}>
+                      {password.length >= 8 ? '✓' : '•'} At least 8 characters
+                    </li>
+                    <li className={/[A-Z]/.test(password) ? 'text-success' : ''}>
+                      {/[A-Z]/.test(password) ? '✓' : '•'} One uppercase letter
+                    </li>
+                    <li className={/[a-z]/.test(password) ? 'text-success' : ''}>
+                      {/[a-z]/.test(password) ? '✓' : '•'} One lowercase letter
+                    </li>
+                    <li className={/[0-9]/.test(password) ? 'text-success' : ''}>
+                      {/[0-9]/.test(password) ? '✓' : '•'} One number
+                    </li>
+                    <li className={/[!@#$%^&*(),.?":{}|<>]/.test(password) ? 'text-success' : ''}>
+                      {/[!@#$%^&*(),.?":{}|<>]/.test(password) ? '✓' : '•'} One special character
+                    </li>
+                  </ul>
+                </div>
+              </Form.Group>
+
+              <Form.Group className="mb-4">
+                <Form.Label>Confirm Password</Form.Label>
+                <Form.Control
+                  type="password"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="auth-input"
+                  isInvalid={confirmPassword.length > 0 && password !== confirmPassword}
+                />
+                {confirmPassword.length > 0 && password !== confirmPassword && (
+                  <Form.Text className="text-danger">
+                    Passwords do not match
+                  </Form.Text>
+                )}
               </Form.Group>
 
               <Button 
                 variant="primary" 
                 type="submit" 
                 className="w-100 py-2 fw-bold auth-button" 
-                disabled={loading}
+                disabled={loading || !isPasswordValid || password !== confirmPassword}
               >
                 {loading ? 'Creating Account...' : 'Register'}
               </Button>
