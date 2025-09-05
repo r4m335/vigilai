@@ -51,6 +51,12 @@ class CriminalRecord(models.Model):
     case = models.ForeignKey(Case, related_name='criminal_records', on_delete=models.CASCADE)
     person_name = models.CharField(max_length=200)
     offenses = models.TextField()
+    photo = models.ImageField(
+        upload_to='criminal_photos/',
+        blank=True,
+        null=True,
+        help_text='Upload an image of the criminal'
+    )
 
     def __str__(self):
         return f"{self.person_name} — Case {self.case.crime_id}"

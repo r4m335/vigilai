@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar, Tabs, Tab } from 'react-bootstrap';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { fetchCase, createCase, updateCase } from './CaseService';
+import { logout } from './services/Authservice';
 import EvidenceForm from './EvidenceForm';
 import WitnessForm from './WitnessForm';
 import CriminalRecordForm from './CriminalRecordForm';
@@ -14,10 +15,12 @@ export default function CaseForm() {
 
   const [formData, setFormData] = useState({
     crime_id: '',
+    title: '',
     description: '',
-    date: '',
+    date: new Date().toISOString().split('T')[0],
     location: '',
     status: 'Open',
+    investigator: ''
   });
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -34,10 +37,12 @@ export default function CaseForm() {
         .then(res => {
           setFormData({
             crime_id: res.data.crime_id || '',
+            title: res.data.title || '',
             description: res.data.description || '',
-            date: res.data.date || '',
+            date: res.data.date || new Date().toISOString().split('T')[0],
             location: res.data.location || '',
             status: res.data.status || 'Open',
+            investigator: res.data.investigator || ''
           });
           setLoading(false);
         })
@@ -81,8 +86,7 @@ export default function CaseForm() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    logout();
     navigate('/login');
   };
 
@@ -149,7 +153,7 @@ export default function CaseForm() {
                       <Row>
                         <Col md={6}>
                           <Form.Group controlId="crimeId" className="mb-3">
-                            <Form.Label className="fw-semibold">Crime ID</Form.Label>
+                            <Form.Label className="fw-semibold">Crime ID *</Form.Label>
                             <Form.Control
                               name="crime_id"
                               type="text"
@@ -163,7 +167,7 @@ export default function CaseForm() {
                         </Col>
                         <Col md={6}>
                           <Form.Group controlId="caseDate" className="mb-3">
-                            <Form.Label className="fw-semibold">Date</Form.Label>
+                            <Form.Label className="fw-semibold">Date *</Form.Label>
                             <Form.Control
                               name="date"
                               type="date"
@@ -176,6 +180,19 @@ export default function CaseForm() {
                         </Col>
                       </Row>
 
+                      <Form.Group controlId="caseTitle" className="mb-3">
+                        <Form.Label className="fw-semibold">Title *</Form.Label>
+                        <Form.Control
+                          name="title"
+                          type="text"
+                          placeholder="Enter case title"
+                          value={formData.title}
+                          onChange={handleChange}
+                          required
+                          className="auth-input"
+                        />
+                      </Form.Group>
+
                       <Form.Group controlId="caseLocation" className="mb-3">
                         <Form.Label className="fw-semibold">Location</Form.Label>
                         <Form.Control
@@ -184,7 +201,18 @@ export default function CaseForm() {
                           placeholder="Enter crime location"
                           value={formData.location}
                           onChange={handleChange}
-                          required
+                          className="auth-input"
+                        />
+                      </Form.Group>
+
+                      <Form.Group controlId="caseInvestigator" className="mb-3">
+                        <Form.Label className="fw-semibold">Investigator</Form.Label>
+                        <Form.Control
+                          name="investigator"
+                          type="text"
+                          placeholder="Enter investigator name"
+                          value={formData.investigator}
+                          onChange={handleChange}
                           className="auth-input"
                         />
                       </Form.Group>
@@ -203,12 +231,13 @@ export default function CaseForm() {
                       </Form.Group>
 
                       <Form.Group controlId="caseStatus" className="mb-4">
-                        <Form.Label className="fw-semibold">Status</Form.Label>
+                        <Form.Label className="fw-semibold">Status *</Form.Label>
                         <Form.Select
                           name="status"
                           value={formData.status}
                           onChange={handleChange}
                           className="auth-input"
+                          required
                         >
                           {statusOptions.map(option => (
                             <option key={option} value={option}>{option}</option>
@@ -238,6 +267,7 @@ export default function CaseForm() {
 
                   {isEdit && (
                     <>
+                    <Tabs>
                       <Tab eventKey="evidence" title="Evidence">
                         <EvidenceForm caseId={id} />
                       </Tab>
@@ -247,6 +277,7 @@ export default function CaseForm() {
                       <Tab eventKey="criminal-records" title="Criminal Records">
                         <CriminalRecordForm caseId={id} />
                       </Tab>
+                    </Tabs>
                     </>
                   )}
                 </Tabs>

@@ -6,9 +6,10 @@ import { fetchEvidence, createEvidence, updateEvidence, deleteEvidence } from '.
 export default function EvidenceForm({ caseId }) {
   const [evidence, setEvidence] = useState([]);
   const [formData, setFormData] = useState({
-    case_id: caseId,
+    case: caseId,
     type_of_crime: '',
-    details: ''
+    details: '',
+    file: null
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -38,35 +39,55 @@ export default function EvidenceForm({ caseId }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleFileChange = (e) => {
+    setFormData(prev => ({ ...prev, file: e.target.files[0] }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
 
+    // Create FormData for file upload
+    const formDataToSend = new FormData();
+    formDataToSend.append('case', caseId);
+    formDataToSend.append('type_of_crime', formData.type_of_crime);
+    formDataToSend.append('details', formData.details);
+    if (formData.file) {
+      formDataToSend.append('file', formData.file);
+    }
+
+    const config = {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      }
+    };
+
     const request = editingId 
-      ? updateEvidence(editingId, formData)
-      : createEvidence(formData);
+      ? updateEvidence(editingId, formDataToSend, config)
+      : createEvidence(formDataToSend, config);
 
     request
       .then(() => {
         loadEvidence();
-        setFormData({ case_id: caseId, type_of_crime: '', details: '' });
+        setFormData({ case: caseId, type_of_crime: '', details: '', file: null });
         setEditingId(null);
         setError(editingId ? 'Evidence updated successfully!' : 'Evidence added successfully!');
         setTimeout(() => setError(null), 3000);
       })
       .catch(err => {
         console.error('Error saving evidence:', err);
-        setError('Failed to save evidence. Please try again.');
+        setError(err.response?.data?.message || 'Failed to save evidence. Please try again.');
       })
       .finally(() => setSubmitting(false));
   };
 
   const handleEdit = (item) => {
     setFormData({
-      case_id: caseId,
+      case: caseId,
       type_of_crime: item.type_of_crime,
-      details: item.details
+      details: item.details,
+      file: null
     });
     setEditingId(item.id);
   };
@@ -110,7 +131,7 @@ export default function EvidenceForm({ caseId }) {
           <h6 className="mb-3">{editingId ? 'Edit Evidence' : 'Add New Evidence'}</h6>
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3">
-              <Form.Label>Type of Crime</Form.Label>
+              <Form.Label>Type of Crime *</Form.Label>
               <Form.Control
                 name="type_of_crime"
                 value={formData.type_of_crime}
@@ -120,7 +141,7 @@ export default function EvidenceForm({ caseId }) {
               />
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Details</Form.Label>
+              <Form.Label>Details *</Form.Label>
               <Form.Control
                 name="details"
                 as="textarea"
@@ -129,6 +150,13 @@ export default function EvidenceForm({ caseId }) {
                 onChange={handleChange}
                 required
                 placeholder="Enter evidence details"
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>File Upload (Optional)</Form.Label>
+              <Form.Control
+                type="file"
+                onChange={handleFileChange}
               />
             </Form.Group>
             <Button type="submit" disabled={submitting} className="me-2">
@@ -150,6 +178,7 @@ export default function EvidenceForm({ caseId }) {
             <tr>
               <th>Type of Crime</th>
               <th>Details</th>
+              <th>File</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -158,6 +187,15 @@ export default function EvidenceForm({ caseId }) {
               <tr key={item.id}>
                 <td>{item.type_of_crime}</td>
                 <td>{item.details}</td>
+                <td>
+                  {item.file ? (
+                    <a href={item.file} target="_blank" rel="noopener noreferrer">
+                      View File
+                    </a>
+                  ) : (
+                    'No file'
+                  )}
+                </td>
                 <td>
                   <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleEdit(item)}>
                     Edit
