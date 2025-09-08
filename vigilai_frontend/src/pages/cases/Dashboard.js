@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion } from 'react-bootstrap';
+import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion, Image } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   fetchCases, 
@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedCase, setExpandedCase] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,7 +29,62 @@ export default function Dashboard() {
 
     // Fetch cases data
     loadCases();
+    
+    // Load profile photo
+    loadProfilePhoto();
+    
+    // Set up storage event listener to detect profile photo updates
+    const handleStorageChange = (e) => {
+      if (e.key === 'profile_photo') {
+        setProfilePhoto(e.newValue);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Clean up event listener
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [navigate]);
+
+  const loadProfilePhoto = () => {
+    // Try to get profile photo from localStorage
+    const storedProfilePhoto = localStorage.getItem('profile_photo');
+    if (storedProfilePhoto) {
+      setProfilePhoto(storedProfilePhoto);
+    } else {
+      // If not in localStorage, try to fetch from API
+      fetchProfilePhoto();
+    }
+  };
+
+  const fetchProfilePhoto = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('/api/profile/', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const profileData = await response.json();
+        if (profileData.profile_photo) {
+          // Make sure we have the full URL for the profile photo
+          const photoUrl = profileData.profile_photo.startsWith('http') 
+            ? profileData.profile_photo 
+            : `${window.location.origin}${profileData.profile_photo}`;
+          
+          setProfilePhoto(photoUrl);
+          localStorage.setItem('profile_photo', photoUrl);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching profile photo:', err);
+    }
+  };
 
   const loadCases = () => {
     setLoading(true);
@@ -43,6 +99,7 @@ export default function Dashboard() {
           // Token is invalid, redirect to login
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          localStorage.removeItem('profile_photo');
           navigate('/login');
         } else {
           setError('Failed to load cases.');
@@ -105,6 +162,7 @@ export default function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('profile_photo');
     navigate('/login');
   };
 
@@ -126,9 +184,24 @@ export default function Dashboard() {
         <Navbar bg="white" expand="lg" className="shadow-sm">
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
-            <div className="ms-auto">
-              <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
-                <i className="bi bi-person me-1"></i>Profile
+            <div className="ms-auto d-flex align-items-center">
+              <Link to="/profile" className="text-decoration-none me-3">
+                {profilePhoto ? (
+                  <Image
+                    src={profilePhoto}
+                    alt="Profile"
+                    roundedCircle
+                    style={{ width: '35px', height: '35px', objectFit: 'cover' }}
+                    className="border"
+                  />
+                ) : (
+                  <div
+                    className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                    style={{ width: '35px', height: '35px', border: '1px solid #dee2e6' }}
+                  >
+                    <i className="bi bi-person text-muted"></i>
+                  </div>
+                )}
               </Link>
               <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
                 Logout
@@ -152,9 +225,25 @@ export default function Dashboard() {
       <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
-          <div className="ms-auto">
-            <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
-              <i className="bi bi-person me-1"></i>Profile
+          <div className="ms-auto d-flex align-items-center">
+            <Link to="/profile" className="text-decoration-none me-3" title="Profile">
+              {profilePhoto ? (
+                <Image
+                  src={profilePhoto}
+                  alt="Profile"
+                  roundedCircle
+                  style={{ width: '40px', height: '40px', objectFit: 'cover' }}
+                  className="border"
+                />
+              ) : (
+                <div
+                  className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                  style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                  title="Profile"
+                >
+                  <i className="bi bi-person text-muted"></i>
+                </div>
+              )}
             </Link>
             <Link to="/cases/new" className="btn btn-primary btn-sm me-2">
               <i className="bi bi-plus-circle me-1"></i>Create New Case

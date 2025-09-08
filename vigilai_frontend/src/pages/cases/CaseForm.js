@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar } from 'react-bootstrap';
+import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar, Image } from 'react-bootstrap';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { fetchCase, createCase, updateCase } from './CaseService';
-import { logout } from './services/Authservice'; // Fixed import path
+import { logout } from './services/Authservice';
 import EvidenceForm from './EvidenceForm';
 import WitnessForm from './WitnessForm';
 import CriminalRecordForm from './CriminalRecordForm';
@@ -19,15 +19,30 @@ export default function CaseForm() {
     date: new Date().toISOString().split('T')[0],
     location: '',
     status: 'Open',
-    investigator: ''
+    investigator: '',
+    type_of_crime: '' // New field added
   });
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('case-details');
   const [newCaseId, setNewCaseId] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(null);
 
   const statusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
+  const crimeTypeOptions = [
+    'Burglary',
+    'Robbery',
+    'Assault',
+    'Theft',
+    'Fraud',
+    'Homicide',
+    'Cyber Crime',
+    'Drug Offense',
+    'Domestic Violence',
+    'Vandalism',
+    'Other'
+  ];
 
   // Fetch existing case data if in edit mode
   useEffect(() => {
@@ -42,7 +57,8 @@ export default function CaseForm() {
             date: res.data.date || new Date().toISOString().split('T')[0],
             location: res.data.location || '',
             status: res.data.status || 'Open',
-            investigator: res.data.investigator || ''
+            investigator: res.data.investigator || '',
+            type_of_crime: res.data.type_of_crime || '' // New field added
           });
           setLoading(false);
         })
@@ -51,6 +67,12 @@ export default function CaseForm() {
           setError('Failed to load case data.');
           setLoading(false);
         });
+    }
+
+    // Try to get profile photo from localStorage
+    const storedProfilePhoto = localStorage.getItem('profile_photo');
+    if (storedProfilePhoto) {
+      setProfilePhoto(storedProfilePhoto);
     }
   }, [id, isEdit]);
 
@@ -140,18 +162,39 @@ export default function CaseForm() {
               </Col>
             </Row>
 
-            <Form.Group controlId="caseTitle" className="mb-3">
-              <Form.Label className="fw-semibold">Title *</Form.Label>
-              <Form.Control
-                name="title"
-                type="text"
-                placeholder="Enter case title"
-                value={formData.title}
-                onChange={handleChange}
-                required
-                className="auth-input"
-              />
-            </Form.Group>
+            <Row>
+              <Col md={6}>
+                <Form.Group controlId="caseTitle" className="mb-3">
+                  <Form.Label className="fw-semibold">Title *</Form.Label>
+                  <Form.Control
+                    name="title"
+                    type="text"
+                    placeholder="Enter case title"
+                    value={formData.title}
+                    onChange={handleChange}
+                    required
+                    className="auth-input"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="typeOfCrime" className="mb-3">
+                  <Form.Label className="fw-semibold">Type of Crime *</Form.Label>
+                  <Form.Select
+                    name="type_of_crime"
+                    value={formData.type_of_crime}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    <option value="">Select type of crime</option>
+                    {crimeTypeOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
 
             <Form.Group controlId="caseLocation" className="mb-3">
               <Form.Label className="fw-semibold">Location</Form.Label>
@@ -233,9 +276,24 @@ export default function CaseForm() {
         <Navbar bg="white" expand="lg" className="shadow-sm">
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
-            <div className="ms-auto">
-              <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
-                <i className="bi bi-person me-1"></i>Profile
+            <div className="ms-auto d-flex align-items-center">
+              <Link to="/profile" className="text-decoration-none me-3">
+                {profilePhoto ? (
+                  <Image
+                    src={profilePhoto}
+                    alt="Profile"
+                    roundedCircle
+                    style={{ width: '35px', height: '35px', objectFit: 'cover' }}
+                    className="border"
+                  />
+                ) : (
+                  <div
+                    className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                    style={{ width: '35px', height: '35px', border: '1px solid #dee2e6' }}
+                  >
+                    <i className="bi bi-person text-muted"></i>
+                  </div>
+                )}
               </Link>
               <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
                 Logout
@@ -258,12 +316,28 @@ export default function CaseForm() {
       <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
-          <div className="ms-auto">
+          <div className="ms-auto d-flex align-items-center">
             <Link to="/dashboard" className="btn btn-outline-secondary btn-sm me-2">
               Dashboard
             </Link>
-            <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
-              <i className="bi bi-person me-1"></i>Profile
+            <Link to="/profile" className="text-decoration-none me-3" title="Profile">
+              {profilePhoto ? (
+                <Image
+                  src={profilePhoto}
+                  alt="Profile"
+                  roundedCircle
+                  style={{ width: '40px', height: '40px', objectFit: 'cover' }}
+                  className="border"
+                />
+              ) : (
+                <div
+                  className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                  style={{ width: '40px', height: '40px', border: '1px solid #dee2e6' }}
+                  title="Profile"
+                >
+                  <i className="bi bi-person text-muted"></i>
+                </div>
+              )}
             </Link>
             <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
               Logout

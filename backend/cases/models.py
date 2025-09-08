@@ -5,6 +5,7 @@ from django.utils import timezone
 class Case(models.Model):
     crime_id = models.CharField(max_length=100, unique=True)
     title = models.CharField(max_length=200)
+    type_of_crime = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     date = models.DateField(auto_now_add=True)
     location = models.CharField(max_length=255, blank=True, default='')
@@ -32,12 +33,12 @@ class Case(models.Model):
 
 class Evidence(models.Model):
     case = models.ForeignKey(Case, related_name='evidences', on_delete=models.CASCADE)
-    type_of_crime = models.CharField(max_length=100)
+    type_of_evidence = models.CharField(max_length=100)
     details = models.TextField()
     file = models.FileField(upload_to='evidences/', blank=True, null=True)
 
     def __str__(self):
-        return f"{self.type_of_crime} for Case {self.case.crime_id}"
+        return f"{self.type_of_evidence} for Case {self.case.crime_id}"
 
 class Witness(models.Model):
     case = models.ForeignKey(Case, related_name='witnesses', on_delete=models.CASCADE)

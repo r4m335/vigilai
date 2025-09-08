@@ -7,7 +7,7 @@ export default function EvidenceForm({ caseId }) {
   const [evidence, setEvidence] = useState([]);
   const [formData, setFormData] = useState({
     case: caseId,
-    type_of_crime: '',
+    type_of_evidence: '',
     details: '',
     file: null
   });
@@ -51,7 +51,7 @@ export default function EvidenceForm({ caseId }) {
     // Create FormData for file upload
     const formDataToSend = new FormData();
     formDataToSend.append('case', caseId);
-    formDataToSend.append('type_of_crime', formData.type_of_crime);
+    formDataToSend.append('type_of_evidence', formData.type_of_evidence);
     formDataToSend.append('details', formData.details);
     if (formData.file) {
       formDataToSend.append('file', formData.file);
@@ -70,7 +70,7 @@ export default function EvidenceForm({ caseId }) {
     request
       .then(() => {
         loadEvidence();
-        setFormData({ case: caseId, type_of_crime: '', details: '', file: null });
+        setFormData({ case: caseId, type_of_evidence: '', details: '', file: null });
         setEditingId(null);
         setError(editingId ? 'Evidence updated successfully!' : 'Evidence added successfully!');
         setTimeout(() => setError(null), 3000);
@@ -85,7 +85,7 @@ export default function EvidenceForm({ caseId }) {
   const handleEdit = (item) => {
     setFormData({
       case: caseId,
-      type_of_crime: item.type_of_crime,
+      type_of_evidence: item.type_of_evidence,
       details: item.details,
       file: null
     });
@@ -131,13 +131,13 @@ export default function EvidenceForm({ caseId }) {
           <h6 className="mb-3">{editingId ? 'Edit Evidence' : 'Add New Evidence'}</h6>
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3">
-              <Form.Label>Type of Crime *</Form.Label>
+              <Form.Label>Type of Evidence *</Form.Label>
               <Form.Control
-                name="type_of_crime"
-                value={formData.type_of_crime}
+                name="type_of_evidence"
+                value={formData.type_of_evidence}
                 onChange={handleChange}
                 required
-                placeholder="e.g., Burglary, Assault, etc."
+                placeholder="e.g., Fingerprint, Weapon, Document, etc."
               />
             </Form.Group>
             <Form.Group className="mb-3">
@@ -176,7 +176,7 @@ export default function EvidenceForm({ caseId }) {
         <Table striped bordered responsive>
           <thead>
             <tr>
-              <th>Type of Crime</th>
+              <th>Type of Evidence</th>
               <th>Details</th>
               <th>File</th>
               <th>Actions</th>
@@ -185,7 +185,7 @@ export default function EvidenceForm({ caseId }) {
           <tbody>
             {evidence.map(item => (
               <tr key={item.id}>
-                <td>{item.type_of_crime}</td>
+                <td>{item.type_of_evidence}</td>
                 <td>{item.details}</td>
                 <td>
                   {item.file ? (

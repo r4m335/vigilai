@@ -55,7 +55,11 @@ function Profile() {
       setCases(casesResponse.data);
       
       if (profileResponse.data.profile_photo) {
-        setPhotoPreview(profileResponse.data.profile_photo);
+        // Make sure we have the full URL for the profile photo
+        const photoUrl = profileResponse.data.profile_photo.startsWith('http') 
+          ? profileResponse.data.profile_photo 
+          : `${window.location.origin}${profileResponse.data.profile_photo}`;
+        setPhotoPreview(photoUrl);
       }
     } catch (err) {
       console.error('Error fetching profile data:', err);
@@ -113,6 +117,16 @@ function Profile() {
       });
 
       setProfile(response.data);
+      
+      // Update the photo preview with the URL from the server response
+      if (response.data.profile_photo) {
+        // Make sure we have the full URL for the profile photo
+        const photoUrl = response.data.profile_photo.startsWith('http') 
+          ? response.data.profile_photo 
+          : `${window.location.origin}${response.data.profile_photo}`;
+        setPhotoPreview(photoUrl);
+      }
+      
       setSuccess('Profile updated successfully!');
       setEditing(false);
       setTimeout(() => setSuccess(null), 3000);
