@@ -28,8 +28,13 @@ class RegisterView(generics.CreateAPIView):
 
 
 class CaseViewSet(viewsets.ModelViewSet):
-    queryset = Case.objects.all().order_by('-date')
     serializer_class = CaseSerializer
+    queryset = Case.objects.all()
+    def get_queryset(self):
+        queryset = Case.objects.all()
+        if self.request.query_params.get('worked_by_me') == 'true':
+            queryset = queryset.filter(investigator=self.request.user)
+        return queryset
 
 class EvidenceViewSet(viewsets.ModelViewSet):
     queryset = Evidence.objects.all()

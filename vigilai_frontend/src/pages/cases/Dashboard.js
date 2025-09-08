@@ -126,6 +126,14 @@ export default function Dashboard() {
         <Navbar bg="white" expand="lg" className="shadow-sm">
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
+            <div className="ms-auto">
+              <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
+                <i className="bi bi-person me-1"></i>Profile
+              </Link>
+              <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
+                Logout
+              </button>
+            </div>
           </Container>
         </Navbar>
         <Container className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
@@ -145,6 +153,9 @@ export default function Dashboard() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto">
+            <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
+              <i className="bi bi-person me-1"></i>Profile
+            </Link>
             <Link to="/cases/new" className="btn btn-primary btn-sm me-2">
               <i className="bi bi-plus-circle me-1"></i>Create New Case
             </Link>

@@ -20,6 +20,7 @@ function Login() {
       const response = await axios.post('/api/token/', { username: email, password });
       localStorage.setItem('access_token', response.data.access);
       localStorage.setItem('refresh_token', response.data.refresh);
+      localStorage.setItem('user_email', email);
       navigate('/dashboard');
     } catch (err) {
       setError('Login failed. Please check your credentials.');

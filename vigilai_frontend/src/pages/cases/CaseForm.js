@@ -1,9 +1,8 @@
-// src/cases/CaseForm.js
 import React, { useState, useEffect } from 'react';
 import { Form, Button, Container, Spinner, Alert, Card, Row, Col, Navbar } from 'react-bootstrap';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { fetchCase, createCase, updateCase } from './CaseService';
-import { logout } from './services/Authservice';
+import { logout } from './services/Authservice'; // Fixed import path
 import EvidenceForm from './EvidenceForm';
 import WitnessForm from './WitnessForm';
 import CriminalRecordForm from './CriminalRecordForm';
@@ -235,6 +234,9 @@ export default function CaseForm() {
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
             <div className="ms-auto">
+              <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
+                <i className="bi bi-person me-1"></i>Profile
+              </Link>
               <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
                 Logout
               </button>
@@ -258,7 +260,10 @@ export default function CaseForm() {
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto">
             <Link to="/dashboard" className="btn btn-outline-secondary btn-sm me-2">
-              Back to Dashboard
+              Dashboard
+            </Link>
+            <Link to="/profile" className="btn btn-outline-secondary btn-sm me-2">
+              <i className="bi bi-person me-1"></i>Profile
             </Link>
             <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
               Logout

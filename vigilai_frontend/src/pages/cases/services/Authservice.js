@@ -1,7 +1,11 @@
-// src/services/AuthService.js
+// src/cases/services/Authservice.js
 import axios from 'axios';
 
 const API_URL = '/api/auth/';
+
+export const getCurrentUserEmail = () => {
+  return localStorage.getItem('user_email');
+};
 
 // Login function that now returns user role
 export const login = async (username, password) => {
@@ -61,6 +65,7 @@ export const logout = () => {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user_role');
+  localStorage.removeItem('user_email');
 };
 
 // Check if user is authenticated
