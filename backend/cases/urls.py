@@ -4,10 +4,10 @@ from .views import CaseViewSet, EvidenceViewSet, WitnessViewSet, CriminalRecordV
 from .views import RegisterView
 
 router = routers.DefaultRouter()
-router.register(r'cases', CaseViewSet)
-router.register(r'evidences', EvidenceViewSet)
-router.register(r'witnesses', WitnessViewSet)
-router.register(r'criminal-records', CriminalRecordViewSet)
+router.register(r'cases', CaseViewSet,basename='cases')
+router.register(r'evidences', EvidenceViewSet,basename='evidences')
+router.register(r'witnesses', WitnessViewSet,basename='witnesses')
+router.register(r'criminal-records', CriminalRecordViewSet,basename='criminal-records')
 
 urlpatterns = [
     path('', include(router.urls)),

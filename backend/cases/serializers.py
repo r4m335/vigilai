@@ -23,6 +23,10 @@ class EvidenceSerializer(serializers.ModelSerializer):
         model = Evidence
         fields = '__all__'
 
+        def create(self, validated_data):
+        # Make sure to handle file or additional logic if needed
+            return Evidence.objects.create(**validated_data)
+
 class WitnessSerializer(serializers.ModelSerializer):
     class Meta:
         model = Witness

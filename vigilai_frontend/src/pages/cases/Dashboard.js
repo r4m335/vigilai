@@ -289,6 +289,9 @@ export default function Dashboard() {
                           <div className="d-flex gap-2 mb-2">
                             {getStatusBadge(c.status)}
                             <Badge bg="light" text="dark">
+                              Type: {c.type_of_crime || 'Not specified'}
+                            </Badge>
+                            <Badge bg="light" text="dark">
                               {new Date(c.date).toLocaleDateString()}
                             </Badge>
                             <Badge bg="light" text="dark">
@@ -322,21 +325,31 @@ export default function Dashboard() {
 
                       <Accordion.Collapse eventKey={c.id}>
                         <div className="mt-4">
-                          {/* Evidence Section */}
+                          {/* Evidence Section - Updated to show Type of Evidence */}
                           <h6 className="fw-bold mb-3">Evidence</h6>
                           {caseDetails[c.id]?.evidence?.length > 0 ? (
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
-                                  <th>Type of Crime</th>
+                                  <th>Type of Evidence</th>
                                   <th>Details</th>
+                                  <th>File</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].evidence.map(evidence => (
                                   <tr key={evidence.id}>
-                                    <td>{evidence.type_of_crime}</td>
+                                    <td>{evidence.type_of_evidence}</td>
                                     <td>{evidence.details}</td>
+                                    <td>
+                                      {evidence.file ? (
+                                        <a href={evidence.file} target="_blank" rel="noopener noreferrer">
+                                          View File
+                                        </a>
+                                      ) : (
+                                        'No file'
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

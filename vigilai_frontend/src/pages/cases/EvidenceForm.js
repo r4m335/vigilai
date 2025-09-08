@@ -17,14 +17,19 @@ export default function EvidenceForm({ caseId }) {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
-    loadEvidence();
+    if (caseId) {
+      loadEvidence();
+    }
   }, [caseId]);
 
   const loadEvidence = () => {
     setLoading(true);
     fetchEvidence(caseId)
       .then(response => {
-        setEvidence(response.data);
+        // Make sure we're getting the data in the correct format
+        const evidenceData = Array.isArray(response.data) ? response.data : 
+                           (response.data.results || response.data.evidence || []);
+        setEvidence(evidenceData);
         setLoading(false);
       })
       .catch(err => {
