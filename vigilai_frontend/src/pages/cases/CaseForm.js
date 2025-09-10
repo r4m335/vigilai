@@ -14,13 +14,13 @@ export default function CaseForm() {
 
   const [formData, setFormData] = useState({
     crime_id: '',
-    title: '',
+    case_number: '', // Changed from title to case_number
     description: '',
     date: new Date().toISOString().split('T')[0],
     location: '',
     status: 'Open',
     investigator: '',
-    type_of_crime: '' // New field added
+    type_of_crime: ''
   });
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -52,13 +52,13 @@ export default function CaseForm() {
         .then(res => {
           setFormData({
             crime_id: res.data.crime_id || '',
-            title: res.data.title || '',
+            case_number: res.data.case_number || res.data.title || '', // Handle both old and new field names
             description: res.data.description || '',
             date: res.data.date || new Date().toISOString().split('T')[0],
             location: res.data.location || '',
             status: res.data.status || 'Open',
             investigator: res.data.investigator || '',
-            type_of_crime: res.data.type_of_crime || '' // New field added
+            type_of_crime: res.data.type_of_crime || ''
           });
           setLoading(false);
         })
@@ -164,13 +164,13 @@ export default function CaseForm() {
 
             <Row>
               <Col md={6}>
-                <Form.Group controlId="caseTitle" className="mb-3">
-                  <Form.Label className="fw-semibold">Title *</Form.Label>
+                <Form.Group controlId="caseNumber" className="mb-3">
+                  <Form.Label className="fw-semibold">Case Number *</Form.Label>
                   <Form.Control
-                    name="title"
+                    name="case_number"
                     type="text"
-                    placeholder="Enter case title"
-                    value={formData.title}
+                    placeholder="Enter case number"
+                    value={formData.case_number}
                     onChange={handleChange}
                     required
                     className="auth-input"

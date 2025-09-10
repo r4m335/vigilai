@@ -4,7 +4,7 @@ from django.utils import timezone
 
 class Case(models.Model):
     crime_id = models.CharField(max_length=100, unique=True)
-    title = models.CharField(max_length=200)
+    case_number = models.CharField(max_length=200)
     type_of_crime = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     date = models.DateField(auto_now_add=True)
