@@ -29,7 +29,7 @@ class Case(models.Model):
 )
 
     def __str__(self):
-        return f"{self.crime_id} - {self.title} ({self.status})"
+        return f"{self.crime_id} - ({self.status})"
 
 class Evidence(models.Model):
     case = models.ForeignKey(Case, related_name='evidences', on_delete=models.CASCADE)
