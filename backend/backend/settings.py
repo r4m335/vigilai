@@ -27,6 +27,9 @@ SECRET_KEY = 'django-insecure-&4hvo$i%(rgym5x=)u!f=no*i3^39_79dv3jkvpgcfx4bkr@_3
 DEBUG = True
 
 ALLOWED_HOSTS = []
+AUTH_USER_MODEL = 'accounts.CustomUser' 
+  
+
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

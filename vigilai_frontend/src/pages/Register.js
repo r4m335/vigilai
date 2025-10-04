@@ -79,7 +79,7 @@ function Register() {
     setLoading(true);
     
     try {
-      await axios.post('/api/register/', { username: email, password });
+      await axios.post('/api/register/', { email, password });
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');

@@ -9,12 +9,17 @@ import CaseForm from './pages/cases/CaseForm';
 import "./Auth.css";
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import Profile from './pages/Profile';
+import NotFound from './components/NotFound'; 
+import PredictionResults from './components/PredictionResults';
+
+
 
 function App() {
   return (
     <Router>
       <Routes>
         {/* Public routes */}
+        <Route path="*" element={<NotFound />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -27,12 +32,7 @@ function App() {
               } />
 
         {/* Protected routes */}
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <Home />
-            </PrivateRoute>
+        <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>
           }
         />
 
