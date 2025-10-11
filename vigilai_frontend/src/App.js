@@ -30,7 +30,8 @@ function App() {
                     <Profile />
                 </PrivateRoute>
               } />
-
+        // In App.js - Remove ProtectedRoute wrapper
+        <Route path="/prediction-results" element={<PredictionResults />} />
         {/* Protected routes */}
         <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>
           }

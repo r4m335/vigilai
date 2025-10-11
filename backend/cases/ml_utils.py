@@ -3,8 +3,8 @@ import lightgbm as lgb
 import joblib
 
 # Load model and features only once (not inside the function)
-model = lgb.Booster(model_file="../data/suspect_lightgbm_model.txt")
-feature_columns = joblib.load("../data/feature_columns.pkl")
+model = lgb.Booster(model_file=r"C:\mini project\vigilai\backend\ml\data\suspect_lightgbm_model.txt")
+feature_columns = joblib.load(r"C:\mini project\vigilai\backend\ml\data\feature_columns.pkl")
 
 def predict_suspects(case_data: dict):
     """

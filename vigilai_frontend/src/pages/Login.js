@@ -18,12 +18,22 @@ function Login() {
     
     try {
       const response = await axios.post('/api/token/', { email, password });
+      
+      // Store tokens and user data
       localStorage.setItem('access_token', response.data.access);
       localStorage.setItem('refresh_token', response.data.refresh);
       localStorage.setItem('user_email', email);
+      localStorage.setItem('is_verified', response.data.is_verified);
+      
       navigate('/dashboard');
-    } catch (err) {
-      setError('Login failed. Please check your credentials.');
+    } catch (error) {
+      if (error.response?.data?.detail) {
+        setError(error.response.data.detail);
+      } else if (error.response?.data?.non_field_errors) {
+        setError(error.response.data.non_field_errors[0]);
+      } else {
+        setError(error.response?.data || 'Login failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }

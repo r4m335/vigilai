@@ -10,7 +10,7 @@ function Profile() {
     first_name: '',
     last_name: '',
     email: '',
-    phone: '',
+    phone_number: '', // ✅ Changed from phone to phone_number
     bio: '',
     profile_photo: null
   });
@@ -103,7 +103,7 @@ function Profile() {
       // Append all profile fields
       formData.append('first_name', profile.first_name);
       formData.append('last_name', profile.last_name);
-      formData.append('phone', profile.phone);
+      formData.append('phone_number', profile.phone_number); // ✅ Changed from phone to phone_number
       formData.append('bio', profile.bio);
       if (profile.profile_photo instanceof File) {
         formData.append('profile_photo', profile.profile_photo);
@@ -304,9 +304,9 @@ function Profile() {
                         <Form.Group className="mb-3">
                           <Form.Label>Phone Number</Form.Label>
                           <Form.Control
-                            name="phone"
+                            name="phone_number" // ✅ Changed from phone to phone_number
                             type="tel"
-                            value={profile.phone}
+                            value={profile.phone_number} // ✅ Changed from phone to phone_number
                             onChange={handleInputChange}
                             placeholder="Enter phone number"
                           />
@@ -349,7 +349,7 @@ function Profile() {
                         </Row>
                         <Row className="mb-3">
                           <Col sm={4} className="fw-semibold">Phone:</Col>
-                          <Col sm={8}>{profile.phone || 'Not provided'}</Col>
+                          <Col sm={8}>{profile.phone_number || 'Not provided'}</Col> {/* ✅ Changed from phone to phone_number */}
                         </Row>
                         <Row className="mb-3">
                           <Col sm={4} className="fw-semibold">Bio:</Col>

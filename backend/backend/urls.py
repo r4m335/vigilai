@@ -29,6 +29,7 @@ from cases.views import CaseViewSet
 from accounts.views import ProfileViewSet
 from django.conf import settings
 from django.conf.urls.static import static
+from accounts.views import CustomTokenObtainPairView
 
 
 
@@ -42,7 +43,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('cases.urls')),
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/', include('accounts.urls')),
+    path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

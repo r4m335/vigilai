@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [expandedCase, setExpandedCase] = useState(null);
   const [profilePhoto, setProfilePhoto] = useState(null);
+  const [predicting, setPredicting] = useState({}); // Track predicting state per case
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -127,6 +128,54 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Error loading case details:', err);
       setError('Failed to load case details.');
+    }
+  };
+
+  const handlePredict = async (caseItem) => {
+    setPredicting(prev => ({ ...prev, [caseItem.id]: true }));
+    
+    try {
+      const token = localStorage.getItem('access_token');
+      
+      // Prepare prediction data based on case information
+      const predictionData = {
+        crime_type: caseItem.type_of_crime || 'robbery', // Use actual crime type from case
+        location: caseItem.location || 'Unknown',
+        time: new Date(caseItem.date).toLocaleTimeString() || '12:00',
+        victim_age: 35, // You might want to add victim_age to your case model
+        case_id: caseItem.id,
+        description: caseItem.description,
+        // Add more features as needed from your case data
+      };
+
+      const response = await fetch('/api/predict/', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(predictionData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Prediction failed');
+      }
+
+      const predictionResult = await response.json();
+      
+      // Navigate to prediction results page with the data
+      navigate('/prediction-results', { 
+        state: { 
+          prediction: predictionResult,
+          caseData: caseItem
+        }
+      });
+      
+    } catch (err) {
+      console.error('Prediction error:', err);
+      setError('Failed to generate prediction. Please try again.');
+    } finally {
+      setPredicting(prev => ({ ...prev, [caseItem.id]: false }));
     }
   };
 
@@ -284,13 +333,10 @@ export default function Dashboard() {
                     <Card.Body className="p-4">
                       <div className="d-flex justify-content-between align-items-start">
                         <div>
-                          <h5 className="fw-bold">#{c.crime_id} - {c.case_number || 'Untitled Case'}</h5>
+                          <h5 className="fw-bold">#{c.crime_id} - {c.title || 'Untitled Case'}</h5>
                           <p className="text-muted mb-2">{c.description}</p>
                           <div className="d-flex gap-2 mb-2">
                             {getStatusBadge(c.status)}
-                            <Badge bg="light" text="dark">
-                              Type: {c.type_of_crime || 'Not specified'}
-                            </Badge>
                             <Badge bg="light" text="dark">
                               {new Date(c.date).toLocaleDateString()}
                             </Badge>
@@ -299,7 +345,25 @@ export default function Dashboard() {
                             </Badge>
                           </div>
                         </div>
-                        <div className="d-flex gap-2">
+                        <div className="d-flex gap-2 flex-wrap">
+                          <Button 
+                            variant="success" 
+                            size="sm"
+                            onClick={() => handlePredict(c)}
+                            disabled={predicting[c.id]}
+                          >
+                            {predicting[c.id] ? (
+                              <>
+                                <Spinner animation="border" size="sm" className="me-1" />
+                                Predicting...
+                              </>
+                            ) : (
+                              <>
+                                <i className="bi bi-robot me-1"></i>
+                                Predict Suspects
+                              </>
+                            )}
+                          </Button>
                           <Link 
                             to={`/cases/edit/${c.id}`} 
                             className="btn btn-sm btn-outline-primary"
@@ -325,31 +389,21 @@ export default function Dashboard() {
 
                       <Accordion.Collapse eventKey={c.id}>
                         <div className="mt-4">
-                          {/* Evidence Section - Updated to show Type of Evidence */}
+                          {/* Evidence Section */}
                           <h6 className="fw-bold mb-3">Evidence</h6>
                           {caseDetails[c.id]?.evidence?.length > 0 ? (
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
-                                  <th>Type of Evidence</th>
+                                  <th>Type of Crime</th>
                                   <th>Details</th>
-                                  <th>File</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].evidence.map(evidence => (
                                   <tr key={evidence.id}>
-                                    <td>{evidence.type_of_evidence}</td>
+                                    <td>{evidence.type_of_crime}</td>
                                     <td>{evidence.details}</td>
-                                    <td>
-                                      {evidence.file ? (
-                                        <a href={evidence.file} target="_blank" rel="noopener noreferrer">
-                                          View File
-                                        </a>
-                                      ) : (
-                                        'No file'
-                                      )}
-                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
