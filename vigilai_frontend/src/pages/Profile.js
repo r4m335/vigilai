@@ -10,9 +10,12 @@ function Profile() {
     first_name: '',
     last_name: '',
     email: '',
-    phone_number: '', // ✅ Changed from phone to phone_number
+    phone_number: '',
     bio: '',
-    profile_photo: null
+    profile_photo: null,
+    staff_id: '',
+    rank: '',
+    jurisdiction: ''
   });
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +25,20 @@ function Profile() {
   const [success, setSuccess] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const navigate = useNavigate();
+
+  // Rank options for police officers (same as register.js)
+  const rankOptions = [
+    'Constable',
+    'Head Constable',
+    'Assistant Sub-Inspector',
+    'Sub-Inspector',
+    'Inspector',
+    'Assistant Commissioner',
+    'Deputy Commissioner',
+    'Additional Commissioner',
+    'Commissioner',
+    'Director General'
+  ];
 
   useEffect(() => {
     fetchProfileData();
@@ -45,13 +62,10 @@ function Profile() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Combine API data with email from login
-      const profileData = {
-        ...profileResponse.data,
-        email: profileResponse.data.email || userEmail // Use API data first, fallback to login email
-      };
+      console.log('Profile API Response:', profileResponse.data); // Debug log
 
-      setProfile(profileData);
+      // Set profile data directly from API response
+      setProfile(profileResponse.data);
       setCases(casesResponse.data);
       
       if (profileResponse.data.profile_photo) {
@@ -100,14 +114,28 @@ function Profile() {
       const token = localStorage.getItem('access_token');
       const formData = new FormData();
       
-      // Append all profile fields
+      // Append all profile fields - using the nested structure expected by your serializer
       formData.append('first_name', profile.first_name);
       formData.append('last_name', profile.last_name);
-      formData.append('phone_number', profile.phone_number); // ✅ Changed from phone to phone_number
-      formData.append('bio', profile.bio);
+      formData.append('phone_number', profile.phone_number);
+      formData.append('bio', profile.bio || '');
+      formData.append('staff_id', profile.staff_id || '');
+      formData.append('rank', profile.rank || '');
+      formData.append('jurisdiction', profile.jurisdiction || '');
+      
       if (profile.profile_photo instanceof File) {
         formData.append('profile_photo', profile.profile_photo);
       }
+
+      console.log('Submitting profile data:', {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone_number: profile.phone_number,
+        bio: profile.bio,
+        staff_id: profile.staff_id,
+        rank: profile.rank,
+        jurisdiction: profile.jurisdiction
+      });
 
       const response = await axios.put('/api/profile/', formData, {
         headers: {
@@ -116,11 +144,12 @@ function Profile() {
         }
       });
 
+      console.log('Profile update response:', response.data); // Debug log
+
       setProfile(response.data);
       
       // Update the photo preview with the URL from the server response
       if (response.data.profile_photo) {
-        // Make sure we have the full URL for the profile photo
         const photoUrl = response.data.profile_photo.startsWith('http') 
           ? response.data.profile_photo 
           : `${window.location.origin}${response.data.profile_photo}`;
@@ -132,7 +161,8 @@ function Profile() {
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Error updating profile:', err);
-      setError(err.response?.data?.message || 'Failed to update profile.');
+      console.error('Error response:', err.response?.data); // Debug log
+      setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to update profile.');
     } finally {
       setSaving(false);
     }
@@ -245,6 +275,8 @@ function Profile() {
                       {profile.first_name} {profile.last_name}
                     </h4>
                     <p className="text-muted">{profile.email || 'Email not available'}</p>
+                    <p className="text-muted small">{profile.rank}</p>
+                    <p className="text-muted small">ID: {profile.staff_id}</p>
                     
                     {!editing && (
                       <Button variant="primary" onClick={() => setEditing(true)}>
@@ -304,11 +336,49 @@ function Profile() {
                         <Form.Group className="mb-3">
                           <Form.Label>Phone Number</Form.Label>
                           <Form.Control
-                            name="phone_number" // ✅ Changed from phone to phone_number
+                            name="phone_number"
                             type="tel"
-                            value={profile.phone_number} // ✅ Changed from phone to phone_number
+                            value={profile.phone_number}
                             onChange={handleInputChange}
                             placeholder="Enter phone number"
+                          />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label>Staff ID</Form.Label>
+                          <Form.Control
+                            name="staff_id"
+                            value={profile.staff_id}
+                            onChange={handleInputChange}
+                            placeholder="Staff ID"
+                          />
+                        </Form.Group>
+
+                        {/* RANK FIELD AS DROPDOWN */}
+                        <Form.Group className="mb-3">
+                          <Form.Label>Rank</Form.Label>
+                          <Form.Select
+                            name="rank"
+                            value={profile.rank}
+                            onChange={handleInputChange}
+                            className="auth-input"
+                          >
+                            <option value="">Select your rank</option>
+                            {rankOptions.map((rank) => (
+                              <option key={rank} value={rank}>
+                                {rank}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                          <Form.Label>Jurisdiction</Form.Label>
+                          <Form.Control
+                            name="jurisdiction"
+                            value={profile.jurisdiction}
+                            onChange={handleInputChange}
+                            placeholder="Your jurisdiction"
                           />
                         </Form.Group>
 
@@ -349,7 +419,19 @@ function Profile() {
                         </Row>
                         <Row className="mb-3">
                           <Col sm={4} className="fw-semibold">Phone:</Col>
-                          <Col sm={8}>{profile.phone_number || 'Not provided'}</Col> {/* ✅ Changed from phone to phone_number */}
+                          <Col sm={8}>{profile.phone_number || 'Not provided'}</Col>
+                        </Row>
+                        <Row className="mb-3">
+                          <Col sm={4} className="fw-semibold">Staff ID:</Col>
+                          <Col sm={8}>{profile.staff_id || 'Not provided'}</Col>
+                        </Row>
+                        <Row className="mb-3">
+                          <Col sm={4} className="fw-semibold">Rank:</Col>
+                          <Col sm={8}>{profile.rank || 'Not provided'}</Col>
+                        </Row>
+                        <Row className="mb-3">
+                          <Col sm={4} className="fw-semibold">Jurisdiction:</Col>
+                          <Col sm={8}>{profile.jurisdiction || 'Not provided'}</Col>
                         </Row>
                         <Row className="mb-3">
                           <Col sm={4} className="fw-semibold">Bio:</Col>

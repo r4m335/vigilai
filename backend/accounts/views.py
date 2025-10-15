@@ -4,13 +4,16 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.exceptions import AuthenticationFailed
-
 from .serializers import (
     ProfileSerializer,
     EmailTokenObtainPairSerializer,
     RegisterSerializer
 )
 from .models import Profile, CustomUser
+from rest_framework.permissions import AllowAny
+
+print("🔥 REGISTER VIEW FROM:", __name__)
+
 
 # --- Custom JWT serializer for admin verification ---
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -55,11 +58,13 @@ class ProfileViewSet(viewsets.ModelViewSet):
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = RegisterSerializer
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save(is_verified=False)
+        user = serializer.save()
         return Response({
-            "message": "Registration successful. Awaiting admin approval."
+            "message": "Registration successful. Awaiting admin approval.",
+            "email": user.email
         }, status=status.HTTP_201_CREATED)

@@ -1,4 +1,3 @@
-// src/cases/CriminalRecordForm.js
 import React, { useState, useEffect } from 'react';
 import { 
   Form, 
@@ -9,7 +8,7 @@ import {
   Card, 
   Image, 
   Row, 
-  Col  // Added missing imports
+  Col 
 } from 'react-bootstrap';
 import { fetchCriminalRecords, createCriminalRecord, updateCriminalRecord, deleteCriminalRecord } from './CaseService';
 
@@ -18,6 +17,9 @@ export default function CriminalRecordForm({ caseId }) {
   const [formData, setFormData] = useState({
     case: caseId,
     person_name: '',
+    age: '',
+    gender: '',
+    district: '',
     offenses: '',
     photo: null
   });
@@ -26,6 +28,18 @@ export default function CriminalRecordForm({ caseId }) {
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+
+  const genderOptions = [
+    { value: '', label: 'Select Gender' },
+    { value: 'Male', label: 'Male' },
+    { value: 'Female', label: 'Female' },
+    { value: 'Other', label: 'Other' }
+  ];
+
+  const districtOptions = Array.from({ length: 14 }, (_, i) => ({
+    value: (i + 1).toString(),
+    label: `District ${i + 1}`
+  }));
 
   useEffect(() => {
     loadRecords();
@@ -69,11 +83,31 @@ export default function CriminalRecordForm({ caseId }) {
     setSubmitting(true);
     setError(null);
 
+    // Validate district
+    if (formData.district && (parseInt(formData.district) < 1 || parseInt(formData.district) > 14)) {
+      setError('District must be between 1 and 14.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Validate age
+    if (formData.age && (parseInt(formData.age) < 10 || parseInt(formData.age) > 120)) {
+      setError('Age must be between 10 and 120.');
+      setSubmitting(false);
+      return;
+    }
+
     // Create FormData for file upload
     const formDataToSend = new FormData();
     formDataToSend.append('case', caseId);
     formDataToSend.append('person_name', formData.person_name);
     formDataToSend.append('offenses', formData.offenses);
+    
+    // Add optional fields if they have values
+    if (formData.age) formDataToSend.append('age', formData.age);
+    if (formData.gender) formDataToSend.append('gender', formData.gender);
+    if (formData.district) formDataToSend.append('district', formData.district);
+    
     if (formData.photo) {
       formDataToSend.append('photo', formData.photo);
     }
@@ -91,7 +125,15 @@ export default function CriminalRecordForm({ caseId }) {
     request
       .then(() => {
         loadRecords();
-        setFormData({ case: caseId, person_name: '', offenses: '', photo: null });
+        setFormData({ 
+          case: caseId, 
+          person_name: '', 
+          age: '', 
+          gender: '', 
+          district: '', 
+          offenses: '', 
+          photo: null 
+        });
         setPhotoPreview(null);
         setEditingId(null);
         setError(editingId ? 'Criminal record updated successfully!' : 'Criminal record added successfully!');
@@ -99,7 +141,7 @@ export default function CriminalRecordForm({ caseId }) {
       })
       .catch(err => {
         console.error('Error saving criminal record:', err);
-        setError(err.response?.data?.message || 'Failed to save criminal record. Please try again.');
+        setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to save criminal record. Please try again.');
       })
       .finally(() => setSubmitting(false));
   };
@@ -108,6 +150,9 @@ export default function CriminalRecordForm({ caseId }) {
     setFormData({
       case: caseId,
       person_name: item.person_name,
+      age: item.age || '',
+      gender: item.gender || '',
+      district: item.district || '',
       offenses: item.offenses,
       photo: null
     });
@@ -131,7 +176,15 @@ export default function CriminalRecordForm({ caseId }) {
   };
 
   const handleCancelEdit = () => {
-    setFormData({ case: caseId, person_name: '', offenses: '', photo: null });
+    setFormData({ 
+      case: caseId, 
+      person_name: '', 
+      age: '', 
+      gender: '', 
+      district: '', 
+      offenses: '', 
+      photo: null 
+    });
     setPhotoPreview(null);
     setEditingId(null);
   };
@@ -175,6 +228,65 @@ export default function CriminalRecordForm({ caseId }) {
               </Col>
               <Col md={6}>
                 <Form.Group className="mb-3">
+                  <Form.Label>Age (Optional)</Form.Label>
+                  <Form.Control
+                    name="age"
+                    type="number"
+                    placeholder="Enter age (10-120)"
+                    value={formData.age}
+                    onChange={handleChange}
+                    min="10"
+                    max="120"
+                  />
+                  <Form.Text className="text-muted">
+                    Age must be between 10 and 120
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Gender (Optional)</Form.Label>
+                  <Form.Select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                  >
+                    {genderOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>District (Optional)</Form.Label>
+                  <Form.Select
+                    name="district"
+                    value={formData.district}
+                    onChange={handleChange}
+                  >
+                    <option value="">Select District</option>
+                    {districtOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    District must be between 1 and 14
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
                   <Form.Label>Photo (Optional)</Form.Label>
                   <Form.Control
                     type="file"
@@ -186,22 +298,23 @@ export default function CriminalRecordForm({ caseId }) {
                   </Form.Text>
                 </Form.Group>
               </Col>
+              <Col md={6}>
+                {photoPreview && (
+                  <div className="mb-3">
+                    <Form.Label>Photo Preview:</Form.Label>
+                    <div>
+                      <Image 
+                        src={photoPreview} 
+                        alt="Preview" 
+                        fluid 
+                        style={{ maxHeight: '200px', maxWidth: '100%' }}
+                        className="border rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </Col>
             </Row>
-
-            {photoPreview && (
-              <div className="mb-3">
-                <Form.Label>Photo Preview:</Form.Label>
-                <div>
-                  <Image 
-                    src={photoPreview} 
-                    alt="Preview" 
-                    fluid 
-                    style={{ maxHeight: '200px', maxWidth: '100%' }}
-                    className="border rounded"
-                  />
-                </div>
-              </div>
-            )}
 
             <Form.Group className="mb-3">
               <Form.Label>Offenses *</Form.Label>
@@ -237,6 +350,9 @@ export default function CriminalRecordForm({ caseId }) {
             <tr>
               <th>Photo</th>
               <th>Person Name</th>
+              <th>Age</th>
+              <th>Gender</th>
+              <th>District</th>
               <th>Offenses</th>
               <th>Actions</th>
             </tr>
@@ -258,6 +374,9 @@ export default function CriminalRecordForm({ caseId }) {
                   )}
                 </td>
                 <td>{item.person_name}</td>
+                <td>{item.age || 'N/A'}</td>
+                <td>{item.gender || 'N/A'}</td>
+                <td>{item.district ? `District ${item.district}` : 'N/A'}</td>
                 <td>{item.offenses}</td>
                 <td>
                   <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleEdit(item)}>

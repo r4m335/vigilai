@@ -1,10 +1,18 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser
+from .models import CustomUser, Profile
+
+# Inline admin for Profile (to show it under CustomUser)
+class ProfileInline(admin.StackedInline):
+    model = Profile
+    can_delete = False
+    verbose_name_plural = 'Profile'
+    fk_name = 'user'
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
+    inlines = [ProfileInline]
     
     # Display fields in list view
     list_display = ('email', 'first_name', 'last_name', 'staff_id', 'rank', 'phone_number', 'jurisdiction', 'is_verified', 'is_staff', 'is_active')
@@ -35,6 +43,12 @@ class CustomUserAdmin(UserAdmin):
     ordering = ('email',)
     
     actions = ['verify_users', 'unverify_users']
+
+    def get_inline_instances(self, request, obj=None):
+        """Only show inline when editing an existing object"""
+        if not obj:
+            return []
+        return super().get_inline_instances(request, obj)
 
     def verify_users(self, request, queryset):
         updated = queryset.update(is_verified=True)

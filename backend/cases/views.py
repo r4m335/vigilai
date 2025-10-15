@@ -6,7 +6,6 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import EmailTokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from .models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
 from .serializers import (
@@ -15,7 +14,6 @@ from .serializers import (
     WitnessSerializer,
     CriminalRecordSerializer,
     SuspectPredictionSerializer,
-    UserRegisterSerializer
 )
 from .permissions import IsOwnerOrReadOnly
 from django.http import JsonResponse
@@ -34,21 +32,7 @@ def predict_view(request):
 
 User = get_user_model()
 
-
-
-
-class EmailTokenObtainPairView(TokenObtainPairView):
-    serializer_class = EmailTokenObtainPairSerializer
-
-
-# -------------------------------
-# User Registration
-# -------------------------------
-class RegisterView(generics.CreateAPIView):
-    queryset = User.objects.all()
-    serializer_class = UserRegisterSerializer
-    permission_classes = [AllowAny]
-
+print("🔥 REGISTER VIEW FROM:", __name__)
 
 # -------------------------------
 # Case ViewSet

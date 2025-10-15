@@ -167,7 +167,7 @@ function Register() {
     // Validate all required fields
     if (!formData.firstName || !formData.lastName || !formData.email || 
         !formData.phoneNumber || !formData.jurisdiction || !formData.staffId || 
-        !formData.rank || !formData.password) {
+        !formData.rank || !formData.password || !formData.confirmPassword) {
       setError('All fields are required');
       setShowErrorToast(true);
       return;
@@ -231,7 +231,8 @@ function Register() {
         jurisdiction: formData.jurisdiction,
         staff_id: formData.staffId,
         rank: formData.rank,
-        password: formData.password
+        password: formData.password,
+        password2: formData.confirmPassword   // ✅ ADDED THIS LINE
       });
       setSuccess(true);
       setShowSuccessToast(true);
@@ -248,7 +249,29 @@ function Register() {
         confirmPassword: ''
       });
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.response?.data?.detail || 'Registration failed. Please try again.';
+      // Handle different error response formats
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (err.response?.data) {
+        // Handle field-specific errors
+        if (typeof err.response.data === 'object') {
+          const errorFields = Object.keys(err.response.data);
+          if (errorFields.length > 0) {
+            // Get the first error message
+            const firstError = err.response.data[errorFields[0]];
+            if (Array.isArray(firstError)) {
+              errorMessage = firstError[0];
+            } else {
+              errorMessage = firstError;
+            }
+          }
+        } else if (err.response.data.detail) {
+          errorMessage = err.response.data.detail;
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
+        }
+      }
+      
       setError(errorMessage);
       setSuccess(false);
       setShowErrorToast(true);

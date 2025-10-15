@@ -29,7 +29,7 @@ from cases.views import CaseViewSet
 from accounts.views import ProfileViewSet
 from django.conf import settings
 from django.conf.urls.static import static
-from accounts.views import CustomTokenObtainPairView
+from accounts.views import CustomTokenObtainPairView, RegisterView as AccountsRegisterView, ProfileViewSet
 
 
 
@@ -40,7 +40,9 @@ router.register(r'cases', CaseViewSet)
 
 
 urlpatterns = [
+    path('', include(router.urls)),
     path('admin/', admin.site.urls),
+    path('api/register/', AccountsRegisterView.as_view(), name='register'),
     path('api/', include('cases.urls')),
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     path('api/', include('accounts.urls')),
@@ -50,6 +52,8 @@ urlpatterns = [
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path('api/', include(router.urls)),
     path('api/profile/', ProfileViewSet.as_view({'get': 'retrieve', 'put': 'update'}), name='profile'),
+    path('api/', include('cases.urls')),
+    path('api/', include('accounts.urls')),
     
 
 ]

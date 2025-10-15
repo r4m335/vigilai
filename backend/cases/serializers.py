@@ -5,43 +5,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 User = get_user_model()
 
-class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    username_field = User.EMAIL_FIELD  # use email for authentication
 
-    def validate(self, attrs):
-        # map email -> username internally
-        attrs["username"] = attrs.get("email")
-        return super().validate(attrs)
-# -------------------------------
-# User Registration Serializer
-# -------------------------------
-class UserRegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
-
-    class Meta:
-        model = User
-        fields = ["email", "password"]  
-        extra_kwargs = {
-            "email": {"required": True},
-            "password": {"write_only": True},
-        }
-
-    def create(self, validated_data):
-        email = validated_data["email"].lower()
-        password = validated_data["password"]
-
-        # use email as username
-        user = User.objects.create_user(
-            username=email,  
-            email=email,
-            password=password
-        )
-        return user
-    
-    def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return value.lower()
 
 
 # -------------------------------
@@ -96,3 +60,8 @@ class CaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Case
         fields = '__all__'
+
+    def validate_district(self, value):
+        if not (1 <= value <= 14):
+            raise serializers.ValidationError("District must be between 1 and 14.")
+        return value

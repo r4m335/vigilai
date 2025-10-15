@@ -26,10 +26,13 @@ class CustomUserManager(BaseUserManager):
 
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
-    phone_number = models.CharField()
-
+    phone_number = models.CharField(
+        max_length=20,
+        unique=True,
+        validators=[RegexValidator(r'^\+?\d{9,15}$', 'Enter a valid phone number')]
+    )
     jurisdiction = models.URLField(max_length=500)
-    staff_id = models.CharField(max_length=15,null=True)
+    staff_id = models.CharField(max_length=15,unique=True)
     rank = models.CharField(max_length=50)
     is_verified = models.BooleanField(default=False)
 
@@ -43,7 +46,7 @@ class CustomUser(AbstractUser):
 
 
 class Profile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,primary_key=True)
     bio = models.TextField(blank=True, null=True)
     profile_photo = models.ImageField(
         upload_to="profile_photos/",

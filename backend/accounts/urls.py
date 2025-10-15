@@ -13,6 +13,7 @@ router = DefaultRouter()
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [
+    path('', include(router.urls)),
     path('admin/', admin.site.urls),
     # Email login (custom)
     path('login/email/', EmailTokenObtainPairView.as_view(), name='email_token_obtain_pair'),

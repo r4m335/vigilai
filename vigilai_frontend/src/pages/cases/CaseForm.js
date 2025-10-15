@@ -12,15 +12,63 @@ export default function CaseForm() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
 
+  // Function to format date to "MM/DD/YYYY HH:MM:SS AM/PM"
+  const formatDateTime = (date) => {
+    const pad = (n) => n.toString().padStart(2, '0');
+    
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const year = date.getFullYear();
+    
+    let hours = date.getHours();
+    const minutes = pad(date.getMinutes());
+    const seconds = pad(date.getSeconds());
+    
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? pad(hours) : '12'; // the hour '0' should be '12'
+    
+    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds} ${ampm}`;
+  };
+
+  // Function to parse date string back to Date object for input
+  const parseDateTimeForInput = (dateTimeString) => {
+    if (!dateTimeString) return new Date();
+    
+    try {
+      // Parse "MM/DD/YYYY HH:MM:SS AM/PM" format
+      const [datePart, timePart, ampm] = dateTimeString.split(' ');
+      if (!datePart || !timePart || !ampm) return new Date();
+      
+      const [month, day, year] = datePart.split('/');
+      const [hours, minutes, seconds] = timePart.split(':');
+      
+      let hour = parseInt(hours);
+      if (ampm === 'PM' && hour < 12) hour += 12;
+      if (ampm === 'AM' && hour === 12) hour = 0;
+      
+      const date = new Date(year, month - 1, day, hour, parseInt(minutes), parseInt(seconds));
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error parsing date:', error);
+      return new Date();
+    }
+  };
+
+  // Function to convert Date to datetime-local input format
+  const dateToInputFormat = (date) => {
+    return date.toISOString().slice(0, 16);
+  };
+
   const [formData, setFormData] = useState({
-    crime_id: '',
-    case_number: '', // Changed from title to case_number
+    case_number: '',
+    primary_type: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
-    location: '',
+    date_time: formatDateTime(new Date()),
+    location_description: '',
     status: 'Open',
-    investigator: '',
-    type_of_crime: ''
+    district: '',
+    ward: ''
   });
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -43,6 +91,8 @@ export default function CaseForm() {
     'Vandalism',
     'Other'
   ];
+  const districtOptions = Array.from({ length: 14 }, (_, i) => (i + 1).toString());
+  const wardOptions = Array.from({ length: 42 }, (_, i) => (i + 1).toString());
 
   // Fetch existing case data if in edit mode
   useEffect(() => {
@@ -50,15 +100,16 @@ export default function CaseForm() {
       setLoading(true);
       fetchCase(id)
         .then(res => {
+          const caseData = res.data;
           setFormData({
-            crime_id: res.data.crime_id || '',
-            case_number: res.data.case_number || res.data.title || '', // Handle both old and new field names
-            description: res.data.description || '',
-            date: res.data.date || new Date().toISOString().split('T')[0],
-            location: res.data.location || '',
-            status: res.data.status || 'Open',
-            investigator: res.data.investigator || '',
-            type_of_crime: res.data.type_of_crime || ''
+            case_number: caseData.case_number || '',
+            primary_type: caseData.primary_type || '',
+            description: caseData.description || '',
+            date_time: caseData.date_time || formatDateTime(new Date()),
+            location_description: caseData.location_description || '',
+            status: caseData.status || 'Open',
+            district: caseData.district || '',
+            ward: caseData.ward || ''
           });
           setLoading(false);
         })
@@ -85,13 +136,36 @@ export default function CaseForm() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'date_time') {
+      // For datetime-local input, convert to desired format
+      const date = new Date(value);
+      if (!isNaN(date.getTime())) {
+        setFormData(prev => ({ ...prev, [name]: formatDateTime(date) }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    // Validate district
+    if (formData.district && (parseInt(formData.district) < 1 || parseInt(formData.district) > 14)) {
+      setError('District must be between 1 and 14.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Validate ward
+    if (formData.ward && (parseInt(formData.ward) < 1 || parseInt(formData.ward) > 42)) {
+      setError('Ward must be between 1 and 42.');
+      setSubmitting(false);
+      return;
+    }
 
     const request = isEdit 
       ? updateCase(id, formData) 
@@ -110,7 +184,7 @@ export default function CaseForm() {
       })
       .catch(err => {
         console.error('Submission error:', err);
-        setError(err.response?.data?.message || 'Submission failed. Please try again.');
+        setError(err.response?.data?.message || err.response?.data?.detail || 'Submission failed. Please try again.');
       })
       .finally(() => setSubmitting(false));
   };
@@ -134,55 +208,46 @@ export default function CaseForm() {
           <Form onSubmit={handleSubmit}>
             <Row>
               <Col md={6}>
-                <Form.Group controlId="crimeId" className="mb-3">
-                  <Form.Label className="fw-semibold">Crime ID *</Form.Label>
+                <Form.Group controlId="caseNumber" className="mb-3">
+                  <Form.Label className="fw-semibold">Case Number</Form.Label>
                   <Form.Control
-                    name="crime_id"
+                    name="case_number"
                     type="text"
-                    placeholder="Enter crime ID"
-                    value={formData.crime_id}
+                    placeholder="Case number will be auto-generated if left blank"
+                    value={formData.case_number}
                     onChange={handleChange}
-                    required
                     className="auth-input"
                   />
+                  <Form.Text className="text-muted">
+                    Leave blank to auto-generate a case number
+                  </Form.Text>
                 </Form.Group>
               </Col>
               <Col md={6}>
                 <Form.Group controlId="caseDate" className="mb-3">
-                  <Form.Label className="fw-semibold">Date *</Form.Label>
+                  <Form.Label className="fw-semibold">Date and Time *</Form.Label>
                   <Form.Control
-                    name="date"
-                    type="date"
-                    value={formData.date}
+                    name="date_time"
+                    type="datetime-local"
+                    value={dateToInputFormat(parseDateTimeForInput(formData.date_time))}
                     onChange={handleChange}
                     required
                     className="auth-input"
                   />
+                  <Form.Text className="text-muted">
+                    Selected: {formData.date_time}
+                  </Form.Text>
                 </Form.Group>
               </Col>
             </Row>
 
             <Row>
               <Col md={6}>
-                <Form.Group controlId="caseNumber" className="mb-3">
-                  <Form.Label className="fw-semibold">Case Number *</Form.Label>
-                  <Form.Control
-                    name="case_number"
-                    type="text"
-                    placeholder="Enter case number"
-                    value={formData.case_number}
-                    onChange={handleChange}
-                    required
-                    className="auth-input"
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group controlId="typeOfCrime" className="mb-3">
+                <Form.Group controlId="primaryType" className="mb-3">
                   <Form.Label className="fw-semibold">Type of Crime *</Form.Label>
                   <Form.Select
-                    name="type_of_crime"
-                    value={formData.type_of_crime}
+                    name="primary_type"
+                    value={formData.primary_type}
                     onChange={handleChange}
                     className="auth-input"
                     required
@@ -194,33 +259,80 @@ export default function CaseForm() {
                   </Form.Select>
                 </Form.Group>
               </Col>
+              <Col md={6}>
+                <Form.Group controlId="caseStatus" className="mb-3">
+                  <Form.Label className="fw-semibold">Status *</Form.Label>
+                  <Form.Select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    {statusOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
             </Row>
 
-            <Form.Group controlId="caseLocation" className="mb-3">
-              <Form.Label className="fw-semibold">Location</Form.Label>
+            <Row>
+              <Col md={6}>
+                <Form.Group controlId="district" className="mb-3">
+                  <Form.Label className="fw-semibold">District (1-14) *</Form.Label>
+                  <Form.Select
+                    name="district"
+                    value={formData.district}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    <option value="">Select district</option>
+                    {districtOptions.map(district => (
+                      <option key={district} value={district}>{district}</option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    District must be between 1 and 14
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="ward" className="mb-3">
+                  <Form.Label className="fw-semibold">Ward (1-42) *</Form.Label>
+                  <Form.Select
+                    name="ward"
+                    value={formData.ward}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    <option value="">Select ward</option>
+                    {wardOptions.map(ward => (
+                      <option key={ward} value={ward}>{ward}</option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    Ward must be between 1 and 42
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Form.Group controlId="locationDescription" className="mb-3">
+              <Form.Label className="fw-semibold">Location Description</Form.Label>
               <Form.Control
-                name="location"
+                name="location_description"
                 type="text"
-                placeholder="Enter crime location"
-                value={formData.location}
+                placeholder="Enter crime location description"
+                value={formData.location_description}
                 onChange={handleChange}
                 className="auth-input"
               />
             </Form.Group>
 
-            <Form.Group controlId="caseInvestigator" className="mb-3">
-              <Form.Label className="fw-semibold">Investigator</Form.Label>
-              <Form.Control
-                name="investigator"
-                type="text"
-                placeholder="Enter investigator name"
-                value={formData.investigator}
-                onChange={handleChange}
-                className="auth-input"
-              />
-            </Form.Group>
-
-            <Form.Group controlId="caseDescription" className="mb-3">
+            <Form.Group controlId="caseDescription" className="mb-4">
               <Form.Label className="fw-semibold">Description</Form.Label>
               <Form.Control
                 name="description"
@@ -231,21 +343,6 @@ export default function CaseForm() {
                 onChange={handleChange}
                 className="auth-input"
               />
-            </Form.Group>
-
-            <Form.Group controlId="caseStatus" className="mb-4">
-              <Form.Label className="fw-semibold">Status *</Form.Label>
-              <Form.Select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="auth-input"
-                required
-              >
-                {statusOptions.map(option => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </Form.Select>
             </Form.Group>
 
             <div className="d-grid gap-2">
