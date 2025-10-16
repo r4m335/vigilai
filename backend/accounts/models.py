@@ -32,7 +32,7 @@ class CustomUser(AbstractUser):
         validators=[RegexValidator(r'^\+?\d{9,15}$', 'Enter a valid phone number')]
     )
     jurisdiction = models.URLField(max_length=500)
-    staff_id = models.CharField(max_length=15,unique=True)
+    staff_id = models.CharField(max_length=15)
     rank = models.CharField(max_length=50)
     is_verified = models.BooleanField(default=False)
 
