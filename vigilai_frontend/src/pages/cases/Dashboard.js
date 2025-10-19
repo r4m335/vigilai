@@ -149,21 +149,35 @@ export default function Dashboard() {
 
   const handlePredict = async (caseItem) => {
     setPredicting(prev => ({ ...prev, [caseItem.id]: true }));
+    setError(null);
     
     try {
       const token = getToken();
       
-      // Prepare prediction data based on case information
+      // Parse date and time from case data
+      const caseDateTime = caseItem.date_time || caseItem.date || new Date().toISOString();
+      const dateObj = new Date(caseDateTime);
+      
+      // Prepare prediction data that matches your backend's prepare_case_data function
       const predictionData = {
-        crime_type: caseItem.primary_type || caseItem.type_of_crime || 'robbery',
-        location: caseItem.location_description || caseItem.location || 'Unknown',
-        time: caseItem.date_time ? new Date(caseItem.date_time).toLocaleTimeString() : '12:00',
-        victim_age: 35, // You might want to add victim_age to your case model
-        case_id: caseItem.id || caseItem.case_id,
-        description: caseItem.description,
-        district: caseItem.district,
-        ward: caseItem.ward
+        // These fields will be transformed by prepare_case_data
+        "crime_type": caseItem.primary_type || caseItem.type_of_crime || "THEFT",
+        "description": caseItem.description || "GENERAL THEFT",
+        "location": caseItem.location_description || caseItem.location || "STREET",
+        "district": parseInt(caseItem.district) || 5,
+        "ward": parseInt(caseItem.ward) || 10,
+        "same_district": 1, // Default to 1
+        "suspect_age": 30, // Default age
+        
+        // These fields are used by prepare_case_data for datetime parsing
+        "datetime": caseDateTime,
+        
+        // Additional context fields
+        "suspect_name": "Unknown",
+        "previous_offenses": "No prior offenses"
       };
+
+      console.log('Sending prediction data to backend:', predictionData);
 
       const response = await fetch('/api/predict/', {
         method: 'POST',
@@ -175,10 +189,12 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
-        throw new Error('Prediction failed');
+        const errorText = await response.text();
+        throw new Error(`Prediction failed: ${response.status} - ${errorText}`);
       }
 
       const predictionResult = await response.json();
+      console.log('Prediction result:', predictionResult);
       
       // Navigate to prediction results page with the data
       navigate('/prediction-results', { 
@@ -190,7 +206,10 @@ export default function Dashboard() {
       
     } catch (err) {
       console.error('Prediction error:', err);
-      setError('Failed to generate prediction. Please try again.');
+      setError(`Failed to generate prediction: ${err.message}`);
+      
+      // Auto-clear error after 5 seconds
+      setTimeout(() => setError(null), 5000);
     } finally {
       setPredicting(prev => ({ ...prev, [caseItem.id]: false }));
     }
@@ -342,6 +361,11 @@ export default function Dashboard() {
         {error && (
           <Alert variant="danger" className="text-center">
             {error}
+            <div className="mt-2">
+              <Button variant="outline-danger" size="sm" onClick={() => setError(null)}>
+                Dismiss
+              </Button>
+            </div>
           </Alert>
         )}
 
@@ -413,7 +437,6 @@ export default function Dashboard() {
                               </>
                             )}
                           </Button>
-                          {/* ✅ FIX: Edit button now uses the correct case ID */}
                           <Link 
                             to={`/cases/edit/${c.id}`} 
                             className="btn btn-sm btn-outline-primary"
