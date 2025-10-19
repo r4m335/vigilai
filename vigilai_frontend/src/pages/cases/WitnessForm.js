@@ -1,4 +1,3 @@
-// src/cases/WitnessForm.js
 import React, { useState, useEffect } from 'react';
 import { Form, Button, Table, Alert, Spinner, Card } from 'react-bootstrap';
 import { fetchWitnesses, createWitness, updateWitness, deleteWitness } from './CaseService';
@@ -16,6 +15,12 @@ export default function WitnessForm({ caseId }) {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
+    if (!caseId || caseId === "undefined") {
+      console.warn("⚠️ Invalid caseId:", caseId);
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setLoading(false);
+      return;
+    }
     loadWitnesses();
   }, [caseId]);
 
@@ -42,6 +47,13 @@ export default function WitnessForm({ caseId }) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    // Validate caseId
+    if (!caseId || caseId === "undefined") {
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setSubmitting(false);
+      return;
+    }
 
     const request = editingId 
       ? updateWitness(editingId, formData)
@@ -85,6 +97,14 @@ export default function WitnessForm({ caseId }) {
         });
     }
   };
+
+  if (!caseId || caseId === "undefined") {
+    return (
+      <Alert variant="warning" className="text-center">
+        Invalid case ID. Please go back and select a valid case.
+      </Alert>
+    );
+  }
 
   if (loading) {
     return (

@@ -1,4 +1,3 @@
-// src/cases/EvidenceForm.js
 import React, { useState, useEffect } from 'react';
 import { Form, Button, Table, Alert, Spinner, Card } from 'react-bootstrap';
 import { fetchEvidence, createEvidence, updateEvidence, deleteEvidence } from './CaseService';
@@ -17,9 +16,13 @@ export default function EvidenceForm({ caseId }) {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
-    if (caseId) {
-      loadEvidence();
+    if (!caseId || caseId === "undefined") {
+      console.warn("⚠️ Invalid caseId:", caseId);
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setLoading(false);
+      return;
     }
+    loadEvidence();
   }, [caseId]);
 
   const loadEvidence = () => {
@@ -52,6 +55,13 @@ export default function EvidenceForm({ caseId }) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    // Validate caseId
+    if (!caseId || caseId === "undefined") {
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setSubmitting(false);
+      return;
+    }
 
     // Create FormData for file upload
     const formDataToSend = new FormData();
@@ -111,6 +121,14 @@ export default function EvidenceForm({ caseId }) {
         });
     }
   };
+
+  if (!caseId || caseId === "undefined") {
+    return (
+      <Alert variant="warning" className="text-center">
+        Invalid case ID. Please go back and select a valid case.
+      </Alert>
+    );
+  }
 
   if (loading) {
     return (

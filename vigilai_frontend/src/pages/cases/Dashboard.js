@@ -8,6 +8,7 @@ import {
   fetchWitnesses, 
   fetchCriminalRecords 
 } from './CaseService';
+import { logout, getToken, isAdmin } from './services/Authservice';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 export default function Dashboard() {
@@ -18,15 +19,19 @@ export default function Dashboard() {
   const [expandedCase, setExpandedCase] = useState(null);
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [predicting, setPredicting] = useState({}); // Track predicting state per case
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Check if user is authenticated
-    const token = localStorage.getItem('access_token');
+    const token = getToken();
     if (!token) {
       navigate('/login');
       return;
     }
+
+    // Check user role
+    setUserIsAdmin(isAdmin());
 
     // Fetch cases data
     loadCases();
@@ -62,7 +67,7 @@ export default function Dashboard() {
 
   const fetchProfilePhoto = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      const token = getToken();
       const response = await fetch('/api/profile/', {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -91,16 +96,24 @@ export default function Dashboard() {
     setLoading(true);
     fetchCases()
       .then(response => {
-        setCases(response.data);
+        // Handle different response formats
+        const casesData = Array.isArray(response.data) ? response.data : 
+                         (response.data.results || response.data.cases || []);
+        
+        // ✅ FIX: Map case_id to id for compatibility
+        const formattedCases = casesData.map(caseItem => ({
+          ...caseItem,
+          id: caseItem.case_id || caseItem.id // Use case_id as id for compatibility
+        }));
+        
+        setCases(formattedCases);
         setLoading(false);
       })
       .catch(err => { 
-        console.error(err);
+        console.error('Error loading cases:', err);
         if (err.response && err.response.status === 401) {
           // Token is invalid, redirect to login
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('profile_photo');
+          logout();
           navigate('/login');
         } else {
           setError('Failed to load cases.');
@@ -120,9 +133,12 @@ export default function Dashboard() {
       setCaseDetails(prev => ({
         ...prev,
         [caseId]: {
-          evidence: evidenceRes.data,
-          witnesses: witnessesRes.data,
-          criminalRecords: recordsRes.data
+          evidence: Array.isArray(evidenceRes.data) ? evidenceRes.data : 
+                   (evidenceRes.data.results || evidenceRes.data.evidence || []),
+          witnesses: Array.isArray(witnessesRes.data) ? witnessesRes.data : 
+                    (witnessesRes.data.results || witnessesRes.data.witnesses || []),
+          criminalRecords: Array.isArray(recordsRes.data) ? recordsRes.data : 
+                         (recordsRes.data.results || recordsRes.data.criminal_records || [])
         }
       }));
     } catch (err) {
@@ -135,17 +151,18 @@ export default function Dashboard() {
     setPredicting(prev => ({ ...prev, [caseItem.id]: true }));
     
     try {
-      const token = localStorage.getItem('access_token');
+      const token = getToken();
       
       // Prepare prediction data based on case information
       const predictionData = {
-        crime_type: caseItem.type_of_crime || 'robbery', // Use actual crime type from case
-        location: caseItem.location || 'Unknown',
-        time: new Date(caseItem.date).toLocaleTimeString() || '12:00',
+        crime_type: caseItem.primary_type || caseItem.type_of_crime || 'robbery',
+        location: caseItem.location_description || caseItem.location || 'Unknown',
+        time: caseItem.date_time ? new Date(caseItem.date_time).toLocaleTimeString() : '12:00',
         victim_age: 35, // You might want to add victim_age to your case model
-        case_id: caseItem.id,
+        case_id: caseItem.id || caseItem.case_id,
         description: caseItem.description,
-        // Add more features as needed from your case data
+        district: caseItem.district,
+        ward: caseItem.ward
       };
 
       const response = await fetch('/api/predict/', {
@@ -209,10 +226,14 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('profile_photo');
+    logout();
     navigate('/login');
+  };
+
+  const handleAdminDashboard = () => {
+    if (userIsAdmin) {
+      navigate('/admin-dashboard');
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -275,6 +296,16 @@ export default function Dashboard() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
+            {userIsAdmin && (
+              <Button 
+                variant="outline-warning" 
+                size="sm" 
+                className="me-2"
+                onClick={handleAdminDashboard}
+              >
+                <i className="bi bi-shield-check me-1"></i>Admin Dashboard
+              </Button>
+            )}
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -317,7 +348,12 @@ export default function Dashboard() {
         <Row className="justify-content-center mb-4">
           <Col lg={10}>
             <div className="d-flex justify-content-between align-items-center">
-              <h2 className="fw-bold text-dark mb-0">Cases Dashboard</h2>
+              <div>
+                <h2 className="fw-bold text-dark mb-0">Cases Dashboard</h2>
+                {userIsAdmin && (
+                  <Badge bg="warning" className="ms-2">Administrator</Badge>
+                )}
+              </div>
               <span className="badge bg-primary">{cases.length} cases</span>
             </div>
             <p className="text-muted">Manage and track all your cases in one place</p>
@@ -333,16 +369,29 @@ export default function Dashboard() {
                     <Card.Body className="p-4">
                       <div className="d-flex justify-content-between align-items-start">
                         <div>
-                          <h5 className="fw-bold">#{c.crime_id} - {c.title || 'Untitled Case'}</h5>
+                          <h5 className="fw-bold">
+                            {c.case_number ? `#${c.case_number}` : `Case #${c.id}`} - {c.primary_type || c.title || 'Untitled Case'}
+                          </h5>
                           <p className="text-muted mb-2">{c.description}</p>
-                          <div className="d-flex gap-2 mb-2">
+                          <div className="d-flex gap-2 mb-2 flex-wrap">
                             {getStatusBadge(c.status)}
                             <Badge bg="light" text="dark">
-                              {new Date(c.date).toLocaleDateString()}
+                              {c.date_time ? new Date(c.date_time).toLocaleDateString() : 
+                               c.date ? new Date(c.date).toLocaleDateString() : 'No date'}
                             </Badge>
                             <Badge bg="light" text="dark">
-                              {c.location}
+                              {c.location_description || c.location || 'No location'}
                             </Badge>
+                            {c.district && (
+                              <Badge bg="light" text="dark">
+                                District {c.district}
+                              </Badge>
+                            )}
+                            {c.ward && (
+                              <Badge bg="light" text="dark">
+                                Ward {c.ward}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <div className="d-flex gap-2 flex-wrap">
@@ -364,6 +413,7 @@ export default function Dashboard() {
                               </>
                             )}
                           </Button>
+                          {/* ✅ FIX: Edit button now uses the correct case ID */}
                           <Link 
                             to={`/cases/edit/${c.id}`} 
                             className="btn btn-sm btn-outline-primary"
@@ -395,15 +445,25 @@ export default function Dashboard() {
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
-                                  <th>Type of Crime</th>
+                                  <th>Type of Evidence</th>
                                   <th>Details</th>
+                                  <th>File</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].evidence.map(evidence => (
                                   <tr key={evidence.id}>
-                                    <td>{evidence.type_of_crime}</td>
+                                    <td>{evidence.type_of_evidence}</td>
                                     <td>{evidence.details}</td>
+                                    <td>
+                                      {evidence.file ? (
+                                        <a href={evidence.file} target="_blank" rel="noopener noreferrer">
+                                          View File
+                                        </a>
+                                      ) : (
+                                        'No file'
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -418,12 +478,14 @@ export default function Dashboard() {
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
+                                  <th>Name</th>
                                   <th>Statement</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].witnesses.map(witness => (
                                   <tr key={witness.id}>
+                                    <td>{witness.name}</td>
                                     <td>{witness.statement}</td>
                                   </tr>
                                 ))}
@@ -439,13 +501,35 @@ export default function Dashboard() {
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
-                                  <th>Details of Past Offense</th>
+                                  <th>Person Name</th>
+                                  <th>Age</th>
+                                  <th>Gender</th>
+                                  <th>District</th>
+                                  <th>Offenses</th>
+                                  <th>Photo</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].criminalRecords.map(record => (
                                   <tr key={record.id}>
-                                    <td>{record.details}</td>
+                                    <td>{record.person_name}</td>
+                                    <td>{record.age || 'N/A'}</td>
+                                    <td>{record.gender || 'N/A'}</td>
+                                    <td>{record.district ? `District ${record.district}` : 'N/A'}</td>
+                                    <td>{record.offenses}</td>
+                                    <td>
+                                      {record.photo ? (
+                                        <Image 
+                                          src={record.photo} 
+                                          alt={record.person_name}
+                                          fluid 
+                                          style={{ maxHeight: '50px', maxWidth: '50px' }}
+                                          className="border rounded"
+                                        />
+                                      ) : (
+                                        <div className="text-muted">No photo</div>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

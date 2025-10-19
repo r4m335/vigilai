@@ -1,5 +1,6 @@
 // src/cases/CaseService.js
 import axios from 'axios';
+import { getToken } from './services/Authservice';
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -10,7 +11,7 @@ const apiClient = axios.create({
 // Add token to requests
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,6 +29,8 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
+      localStorage.removeItem('access');
+      localStorage.removeItem('refresh');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -62,3 +65,49 @@ export const fetchCriminalRecords = (caseId) => apiClient.get(`${CRIMINAL_RECORD
 export const createCriminalRecord = (data) => apiClient.post(CRIMINAL_RECORD_API_URL, data);
 export const updateCriminalRecord = (id, data) => apiClient.put(`${CRIMINAL_RECORD_API_URL}${id}/`, data);
 export const deleteCriminalRecord = (id) => apiClient.delete(`${CRIMINAL_RECORD_API_URL}${id}/`);
+
+// ✅ Alternative helper functions using direct axios calls (for backward compatibility)
+export const fetchCasesAlt = async () => {
+  return axios.get(process.env.REACT_APP_API_URL + CASE_API_URL || 'http://localhost:8000/api' + CASE_API_URL, {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+export const fetchCaseAlt = async (id) => {
+  return axios.get(`${process.env.REACT_APP_API_URL + CASE_API_URL || 'http://localhost:8000/api' + CASE_API_URL}${id}/`, {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+export const createCaseAlt = async (data) => {
+  return axios.post(process.env.REACT_APP_API_URL + CASE_API_URL || 'http://localhost:8000/api' + CASE_API_URL, data, {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+export const updateCaseAlt = async (id, data) => {
+  return axios.put(`${process.env.REACT_APP_API_URL + CASE_API_URL || 'http://localhost:8000/api' + CASE_API_URL}${id}/`, data, {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+export const deleteCaseAlt = async (id) => {
+  return axios.delete(`${process.env.REACT_APP_API_URL + CASE_API_URL || 'http://localhost:8000/api' + CASE_API_URL}${id}/`, {
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};

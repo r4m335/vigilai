@@ -1,6 +1,5 @@
 from django.db import models
 from django.conf import settings
-import uuid
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -76,6 +75,12 @@ class Witness(models.Model):
     case = models.ForeignKey(Case, related_name='witnesses', on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     statement = models.TextField()
+    contact_info = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Phone number or email of the witness"
+    )
 
     created_at = models.DateTimeField(default=timezone.now)
 

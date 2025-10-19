@@ -42,6 +42,12 @@ export default function CriminalRecordForm({ caseId }) {
   }));
 
   useEffect(() => {
+    if (!caseId || caseId === "undefined") {
+      console.warn("⚠️ Invalid caseId:", caseId);
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setLoading(false);
+      return;
+    }
     loadRecords();
   }, [caseId]);
 
@@ -82,6 +88,13 @@ export default function CriminalRecordForm({ caseId }) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+
+    // Validate caseId
+    if (!caseId || caseId === "undefined") {
+      setError("Invalid case ID. Please reload or select a valid case.");
+      setSubmitting(false);
+      return;
+    }
 
     // Validate district
     if (formData.district && (parseInt(formData.district) < 1 || parseInt(formData.district) > 14)) {
@@ -188,6 +201,14 @@ export default function CriminalRecordForm({ caseId }) {
     setPhotoPreview(null);
     setEditingId(null);
   };
+
+  if (!caseId || caseId === "undefined") {
+    return (
+      <Alert variant="warning" className="text-center">
+        Invalid case ID. Please go back and select a valid case.
+      </Alert>
+    );
+  }
 
   if (loading) {
     return (

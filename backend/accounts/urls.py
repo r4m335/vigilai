@@ -3,28 +3,27 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.views import (
-    EmailTokenObtainPairView,
     CustomTokenObtainPairView,
     RegisterView,
-    ProfileViewSet,
+    ProfileView,
+    LoginView,
 )
 
 router = DefaultRouter()
-router.register(r'profile', ProfileViewSet, basename='profile')
+router.register(r'profile', ProfileView, basename='profile')
 
 urlpatterns = [
+     # REST router for profile
     path('', include(router.urls)),
-    path('admin/', admin.site.urls),
-    # Email login (custom)
-    path('login/email/', EmailTokenObtainPairView.as_view(), name='email_token_obtain_pair'),
-    # Default login
-    path('login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    # Admin-verified login
-    path('login/admin/', CustomTokenObtainPairView.as_view(), name='custom_token_obtain_pair'),
-    # Token refresh
-    path('login/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    # Register
+
+    # Register (open)
     path('register/', RegisterView.as_view(), name='register'),
-    # Profile API
-    path('api/', include(router.urls)),
+    path('login/', LoginView.as_view(), name='login'),
+    
+
+    # Token endpoints (single canonical login endpoint)
+    # /api/token/ -> returns access + refresh + user info (via CustomTokenObtainPairSerializer)
+    path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
 ]

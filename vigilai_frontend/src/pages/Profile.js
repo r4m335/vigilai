@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Form, Button, Image, Alert, Spinner, Navbar, Badge, ListGroup } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { logout, getCurrentUserEmail } from './cases/services/Authservice';
+import { logout, getCurrentUserEmail, getToken, isAdmin } from './cases/services/Authservice';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 function Profile() {
@@ -24,30 +24,23 @@ function Profile() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
   const navigate = useNavigate();
-
-  // Rank options for police officers (same as register.js)
-  const rankOptions = [
-    'Constable',
-    'Head Constable',
-    'Assistant Sub-Inspector',
-    'Sub-Inspector',
-    'Inspector',
-    'Assistant Commissioner',
-    'Deputy Commissioner',
-    'Additional Commissioner',
-    'Commissioner',
-    'Director General'
-  ];
 
   useEffect(() => {
     fetchProfileData();
+    checkUserRole();
   }, []);
+
+  const checkUserRole = () => {
+    const adminStatus = isAdmin();
+    setUserIsAdmin(adminStatus);
+  };
 
   const fetchProfileData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
+      const token = getToken();
       
       // Get email from login credentials
       const userEmail = getCurrentUserEmail() || localStorage.getItem('user_email');
@@ -62,14 +55,13 @@ function Profile() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      console.log('Profile API Response:', profileResponse.data); // Debug log
+      console.log('Profile API Response:', profileResponse.data);
 
       // Set profile data directly from API response
       setProfile(profileResponse.data);
       setCases(casesResponse.data);
       
       if (profileResponse.data.profile_photo) {
-        // Make sure we have the full URL for the profile photo
         const photoUrl = profileResponse.data.profile_photo.startsWith('http') 
           ? profileResponse.data.profile_photo 
           : `${window.location.origin}${profileResponse.data.profile_photo}`;
@@ -86,9 +78,9 @@ function Profile() {
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setProfile(prev => ({ ...prev, [name]: value }));
+  const handleBioChange = (e) => {
+    const { value } = e.target;
+    setProfile(prev => ({ ...prev, bio: value }));
   };
 
   const handlePhotoChange = (e) => {
@@ -111,30 +103,18 @@ function Profile() {
     setError(null);
     
     try {
-      const token = localStorage.getItem('access_token');
+      const token = getToken();
       const formData = new FormData();
       
-      // Append all profile fields - using the nested structure expected by your serializer
-      formData.append('first_name', profile.first_name);
-      formData.append('last_name', profile.last_name);
-      formData.append('phone_number', profile.phone_number);
+      // Only append editable fields: bio and profile_photo
       formData.append('bio', profile.bio || '');
-      formData.append('staff_id', profile.staff_id || '');
-      formData.append('rank', profile.rank || '');
-      formData.append('jurisdiction', profile.jurisdiction || '');
       
       if (profile.profile_photo instanceof File) {
         formData.append('profile_photo', profile.profile_photo);
       }
 
       console.log('Submitting profile data:', {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        phone_number: profile.phone_number,
-        bio: profile.bio,
-        staff_id: profile.staff_id,
-        rank: profile.rank,
-        jurisdiction: profile.jurisdiction
+        bio: profile.bio
       });
 
       const response = await axios.put('/api/profile/', formData, {
@@ -144,8 +124,9 @@ function Profile() {
         }
       });
 
-      console.log('Profile update response:', response.data); // Debug log
+      console.log('Profile update response:', response.data);
 
+      // Update profile with response data
       setProfile(response.data);
       
       // Update the photo preview with the URL from the server response
@@ -161,10 +142,18 @@ function Profile() {
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error('Error updating profile:', err);
-      console.error('Error response:', err.response?.data); // Debug log
+      console.error('Error response:', err.response?.data);
       setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to update profile.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDashboardClick = () => {
+    if (userIsAdmin) {
+      navigate('/admin-dashboard');
+    } else {
+      navigate('/dashboard');
     }
   };
 
@@ -214,8 +203,13 @@ function Profile() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto">
-            <Button variant="outline-secondary" size="sm" className="me-2" onClick={() => navigate('/dashboard')}>
-              Dashboard
+            <Button 
+              variant="outline-secondary" 
+              size="sm" 
+              className="me-2" 
+              onClick={handleDashboardClick}
+            >
+              {userIsAdmin ? 'Admin Dashboard' : 'Dashboard'}
             </Button>
             <Button variant="outline-primary" size="sm" onClick={handleLogout}>
               Logout
@@ -230,6 +224,11 @@ function Profile() {
             <div className="text-center mb-4">
               <h2 className="fw-bold text-dark">Officer Profile</h2>
               <p className="text-muted">Manage your profile and view your case history</p>
+              {userIsAdmin && (
+                <Badge bg="warning" className="mt-2">
+                  Administrator
+                </Badge>
+              )}
             </div>
 
             {error && <Alert variant="danger">{error}</Alert>}
@@ -268,6 +267,9 @@ function Profile() {
                           accept="image/*"
                           onChange={handlePhotoChange}
                         />
+                        <Form.Text className="text-muted">
+                          You can update your profile picture
+                        </Form.Text>
                       </Form.Group>
                     )}
 
@@ -278,8 +280,14 @@ function Profile() {
                     <p className="text-muted small">{profile.rank}</p>
                     <p className="text-muted small">ID: {profile.staff_id}</p>
                     
+                    {userIsAdmin && (
+                      <Badge bg="warning" className="mb-2">
+                        Administrator
+                      </Badge>
+                    )}
+                    
                     {!editing && (
-                      <Button variant="primary" onClick={() => setEditing(true)}>
+                      <Button variant="primary" onClick={() => setEditing(true)} className="mt-2">
                         Edit Profile
                       </Button>
                     )}
@@ -295,93 +303,77 @@ function Profile() {
                     
                     {editing ? (
                       <Form onSubmit={handleSubmit}>
+                        {/* Read-only fields */}
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>First Name *</Form.Label>
+                              <Form.Label>First Name</Form.Label>
                               <Form.Control
-                                name="first_name"
-                                value={profile.first_name}
-                                onChange={handleInputChange}
-                                required
+                                value={profile.first_name || 'Not set'}
+                                disabled
+                                className="bg-light"
                               />
                             </Form.Group>
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Last Name *</Form.Label>
+                              <Form.Label>Last Name</Form.Label>
                               <Form.Control
-                                name="last_name"
-                                value={profile.last_name}
-                                onChange={handleInputChange}
-                                required
+                                value={profile.last_name || 'Not set'}
+                                disabled
+                                className="bg-light"
                               />
                             </Form.Group>
                           </Col>
                         </Row>
 
                         <Form.Group className="mb-3">
-                          <Form.Label>Email (Username)</Form.Label>
+                          <Form.Label>Email</Form.Label>
                           <Form.Control
                             type="email"
                             value={profile.email || 'Email not available'}
                             disabled
                             className="bg-light"
                           />
-                          <Form.Text className="text-muted">
-                            Email cannot be changed
-                          </Form.Text>
                         </Form.Group>
 
                         <Form.Group className="mb-3">
                           <Form.Label>Phone Number</Form.Label>
                           <Form.Control
-                            name="phone_number"
-                            type="tel"
-                            value={profile.phone_number}
-                            onChange={handleInputChange}
-                            placeholder="Enter phone number"
+                            value={profile.phone_number || 'Not provided'}
+                            disabled
+                            className="bg-light"
                           />
                         </Form.Group>
 
                         <Form.Group className="mb-3">
                           <Form.Label>Staff ID</Form.Label>
                           <Form.Control
-                            name="staff_id"
-                            value={profile.staff_id}
-                            onChange={handleInputChange}
-                            placeholder="Staff ID"
+                            value={profile.staff_id || 'Not provided'}
+                            disabled
+                            className="bg-light"
                           />
                         </Form.Group>
 
-                        {/* RANK FIELD AS DROPDOWN */}
                         <Form.Group className="mb-3">
                           <Form.Label>Rank</Form.Label>
-                          <Form.Select
-                            name="rank"
-                            value={profile.rank}
-                            onChange={handleInputChange}
-                            className="auth-input"
-                          >
-                            <option value="">Select your rank</option>
-                            {rankOptions.map((rank) => (
-                              <option key={rank} value={rank}>
-                                {rank}
-                              </option>
-                            ))}
-                          </Form.Select>
+                          <Form.Control
+                            value={profile.rank || 'Not provided'}
+                            disabled
+                            className="bg-light"
+                          />
                         </Form.Group>
 
                         <Form.Group className="mb-3">
                           <Form.Label>Jurisdiction</Form.Label>
                           <Form.Control
-                            name="jurisdiction"
-                            value={profile.jurisdiction}
-                            onChange={handleInputChange}
-                            placeholder="Your jurisdiction"
+                            value={profile.jurisdiction || 'Not provided'}
+                            disabled
+                            className="bg-light"
                           />
                         </Form.Group>
 
+                        {/* Editable Bio field */}
                         <Form.Group className="mb-4">
                           <Form.Label>Bio</Form.Label>
                           <Form.Control
@@ -389,16 +381,23 @@ function Profile() {
                             as="textarea"
                             rows={3}
                             value={profile.bio}
-                            onChange={handleInputChange}
+                            onChange={handleBioChange}
                             placeholder="Tell us about yourself..."
                           />
+                          <Form.Text className="text-muted">
+                            You can update your bio information
+                          </Form.Text>
                         </Form.Group>
 
                         <div className="d-flex gap-2">
                           <Button type="submit" variant="primary" disabled={saving}>
                             {saving ? 'Saving...' : 'Save Changes'}
                           </Button>
-                          <Button variant="secondary" onClick={() => setEditing(false)}>
+                          <Button variant="secondary" onClick={() => {
+                            setEditing(false);
+                            // Reset any unsaved changes
+                            fetchProfileData();
+                          }}>
                             Cancel
                           </Button>
                         </div>
@@ -436,6 +435,16 @@ function Profile() {
                         <Row className="mb-3">
                           <Col sm={4} className="fw-semibold">Bio:</Col>
                           <Col sm={8}>{profile.bio || 'No bio provided'}</Col>
+                        </Row>
+                        <Row className="mb-3">
+                          <Col sm={4} className="fw-semibold">Role:</Col>
+                          <Col sm={8}>
+                            {userIsAdmin ? (
+                              <Badge bg="warning">Administrator</Badge>
+                            ) : (
+                              <Badge bg="primary">Officer</Badge>
+                            )}
+                          </Col>
                         </Row>
                       </>
                     )}

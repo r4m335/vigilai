@@ -68,6 +68,11 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:3000']
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
 ROOT_URLCONF = 'backend.urls'
 
 TEMPLATES = [
@@ -159,12 +164,14 @@ REST_FRAMEWORK = {
 }
 
 
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),  # default is 5 minutes
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
+
 
 LOGGING = {
     'version': 1,

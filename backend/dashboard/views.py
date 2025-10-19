@@ -1,0 +1,82 @@
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from accounts.models import CustomUser, Profile
+from cases.models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
+from accounts.serializers import RegisterSerializer, ProfileSerializer
+from cases.serializers import CaseSerializer, EvidenceSerializer, WitnessSerializer, CriminalRecordSerializer, SuspectPredictionSerializer
+
+class AdminOnlyPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_superuser  # only allow admin access
+
+
+class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CustomUser.objects.all().order_by('-date_joined')
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+    @action(detail=True, methods=['patch'], permission_classes=[AdminOnlyPermission])
+    def verify(self, request, pk=None):
+        """
+        Verify a single user.
+        PATCH /api/admin-dashboard/users/{id}/verify/
+        """
+        user = self.get_object()
+        user.is_verified = True
+        user.save()
+        serializer = self.get_serializer(user)
+        return Response({
+            'status': 'user verified',
+            'user': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], permission_classes=[AdminOnlyPermission])
+    def unverify(self, request, pk=None):
+        """
+        Unverify a single user.
+        PATCH /api/admin-dashboard/users/{id}/unverify/
+        """
+        user = self.get_object()
+        user.is_verified = False
+        user.save()
+        serializer = self.get_serializer(user)
+        return Response({
+            'status': 'user unverified',
+            'user': serializer.data
+        }, status=status.HTTP_200_OK)
+
+class AdminProfileViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Profile.objects.all().order_by('-created_at')  # Fixed: Use Profile model instead of Case
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+
+class AdminCaseViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Case.objects.all().order_by('-created_at')
+    serializer_class = CaseSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+
+class AdminEvidenceViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Evidence.objects.all()
+    serializer_class = EvidenceSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+
+class AdminWitnessViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Witness.objects.all()
+    serializer_class = WitnessSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+
+class AdminCriminalRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CriminalRecord.objects.all()
+    serializer_class = CriminalRecordSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+
+
+class AdminPredictionViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SuspectPrediction.objects.all()
+    serializer_class = SuspectPredictionSerializer
+    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]

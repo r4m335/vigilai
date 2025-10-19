@@ -3,32 +3,53 @@ from django.contrib.auth.password_validation import validate_password
 from .models import Profile, CustomUser
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.exceptions import AuthenticationFailed
 
 User = get_user_model()
 
-class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
-    username_field = User.EMAIL_FIELD  # use email for authentication
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    # ensure TokenObtainPairSerializer uses email as username
+    username_field = User.EMAIL_FIELD
 
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+        # put anything you want into the token payload
         token['email'] = user.email
+        token['is_superuser'] = user.is_superuser
+        token['is_verified'] = user.is_verified
+        token['rank'] = getattr(user, 'rank', '')
         return token
 
     def validate(self, attrs):
-        # map email -> username internally
-        attrs["username"] = attrs.get("email")
+        # Map email to username before parent validate
+        # client sends {"email": "...", "password": "..."}
+        attrs['username'] = attrs.get('email') or attrs.get('username')
         data = super().validate(attrs)
 
         user = self.user
 
+        # Optional: block login if not verified
         if not user.is_verified:
-            raise serializers.ValidationError("Your account has not been verified by the admin yet.")
+            raise AuthenticationFailed("Your account is not verified by admin.")
 
-        if not user.is_active:
-            raise serializers.ValidationError("Your account is inactive. Contact the administrator.")
-
+        # Add user info to response payload
+        data['user'] = {
+            'id': user.pk,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'is_superuser': user.is_superuser,
+            'is_staff': user.is_staff,
+            'is_verified': user.is_verified,
+            'rank': getattr(user, 'rank', ''),
+        }
         return data
+
+
+
 
 class ProfileSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source='user.first_name', required=False)
@@ -44,17 +65,16 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def update(self, instance, validated_data):
-        # Extract and handle user-related fields separately
         user_data = validated_data.pop('user', {})
 
-        # ✅ Update the User model fields (this includes phone_number)
+        # Update user fields
         user = instance.user
+        for attr, value in user_data.items():
+            setattr(user, attr, value)
         if user_data:
-            for attr, value in user_data.items():
-                setattr(user, attr, value)
             user.save(update_fields=user_data.keys())
 
-        # ✅ Update the Profile fields (bio, profile_photo)
+        # Update profile fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -68,6 +88,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = (
+            'id',
             'email',
             'password',
             'password2',
@@ -76,7 +97,10 @@ class RegisterSerializer(serializers.ModelSerializer):
             'phone_number',
             'jurisdiction',
             'staff_id',
-            'rank'
+            'rank',
+            'is_verified', 
+            'date_joined', 
+            'last_login'
         )
 
     def validate(self, attrs):
