@@ -12,14 +12,18 @@ import {
   Image,
   Button,
   Modal,
-  Alert
+  Alert,
+  Form,
+  InputGroup
 } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { logout, getToken } from './cases/services/Authservice';
 
 function AdminDashboard() {
   const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [cases, setCases] = useState([]);
+  const [filteredCases, setFilteredCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [profilePhoto, setProfilePhoto] = useState(null);
@@ -27,6 +31,13 @@ function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  
+  // Search and filter states
+  const [userSearch, setUserSearch] = useState('');
+  const [userRankFilter, setUserRankFilter] = useState('');
+  const [caseSearch, setCaseSearch] = useState('');
+  const [caseTypeFilter, setCaseTypeFilter] = useState('');
+  
   const navigate = useNavigate();
 
   // Simplified stats cards - only users and cases
@@ -94,9 +105,11 @@ function AdminDashboard() {
             switch (key) {
               case 'users':
                 setUsers(data);
+                setFilteredUsers(data);
                 break;
               case 'cases':
                 setCases(data);
+                setFilteredCases(data);
                 break;
               default:
                 break;
@@ -125,6 +138,47 @@ function AdminDashboard() {
 
     fetchData();
   }, [navigate]);
+
+  // Filter users based on search and filters
+  useEffect(() => {
+    let filtered = users;
+
+    // Apply search filter
+    if (userSearch.trim() !== '') {
+      filtered = filtered.filter(user => 
+        user.staff_id?.toString().toLowerCase().includes(userSearch.toLowerCase()) ||
+        user.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
+        `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase().includes(userSearch.toLowerCase())
+      );
+    }
+
+    // Apply rank filter
+    if (userRankFilter) {
+      filtered = filtered.filter(user => user.rank === userRankFilter);
+    }
+
+    setFilteredUsers(filtered);
+  }, [userSearch, userRankFilter, users]);
+
+  // Filter cases based on search and filters
+  useEffect(() => {
+    let filtered = cases;
+
+    // Apply search filter
+    if (caseSearch.trim() !== '') {
+      filtered = filtered.filter(caseItem => 
+        caseItem.case_number?.toString().toLowerCase().includes(caseSearch.toLowerCase()) ||
+        caseItem.id?.toString().toLowerCase().includes(caseSearch.toLowerCase())
+      );
+    }
+
+    // Apply type filter
+    if (caseTypeFilter) {
+      filtered = filtered.filter(caseItem => caseItem.primary_type === caseTypeFilter);
+    }
+
+    setFilteredCases(filtered);
+  }, [caseSearch, caseTypeFilter, cases]);
 
   const handleLogout = () => {
     logout();
@@ -211,6 +265,21 @@ function AdminDashboard() {
     fetchData();
   };
 
+  const clearUserFilters = () => {
+    setUserSearch('');
+    setUserRankFilter('');
+  };
+
+  const clearCaseFilters = () => {
+    setCaseSearch('');
+    setCaseTypeFilter('');
+  };
+
+  const getUniqueValues = (data, key) => {
+    const values = data.map(item => item[key]).filter(Boolean);
+    return [...new Set(values)].sort();
+  };
+
   const getStatusVariant = (status) => {
     if (!status) return 'secondary';
     
@@ -243,11 +312,6 @@ function AdminDashboard() {
   };
 
   // CORRECTED case data accessor functions based on your Django model
-  const getCaseTitle = (caseItem) => {
-    // Your model doesn't have a title field, use primary_type or description
-    return caseItem?.primary_type || caseItem?.description?.substring(0, 50) + '...' || 'Untitled';
-  };
-
   const getCaseType = (caseItem) => {
     return caseItem?.primary_type || 'N/A';
   };
@@ -393,7 +457,7 @@ function AdminDashboard() {
     <Card className="border-0 shadow-sm">
       <Card.Header className="bg-white d-flex justify-content-between align-items-center">
         <div>
-          <h5 className="mb-0 fw-bold">All Users ({users?.length || 0})</h5>
+          <h5 className="mb-0 fw-bold">All Users ({filteredUsers?.length || 0})</h5>
         </div>
         <div className="d-flex align-items-center gap-2">
           <Badge bg="success" className="me-2">
@@ -407,10 +471,68 @@ function AdminDashboard() {
           </Button>
         </div>
       </Card.Header>
+      
+      {/* User Search and Filters */}
+      <Card.Body className="border-bottom">
+        <Row className="g-3">
+          <Col md={8}>
+            <Form.Group>
+              <InputGroup>
+                <InputGroup.Text>
+                  <i className="bi bi-search"></i>
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  placeholder="Search users by staff ID, email, or name..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+                {(userSearch || userRankFilter) && (
+                  <Button 
+                    variant="outline-secondary" 
+                    onClick={clearUserFilters}
+                    title="Clear filters"
+                  >
+                    <i className="bi bi-x"></i>
+                  </Button>
+                )}
+              </InputGroup>
+            </Form.Group>
+          </Col>
+          <Col md={4}>
+            <Form.Group>
+              <Form.Select
+                value={userRankFilter}
+                onChange={(e) => setUserRankFilter(e.target.value)}
+              >
+                <option value="">All Ranks</option>
+                {getUniqueValues(users, 'rank').map(rank => (
+                  <option key={rank} value={rank}>{rank}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+        </Row>
+        {(userSearch || userRankFilter) && (
+          <div className="mt-2">
+            <small className="text-muted">
+              Showing {filteredUsers.length} of {users.length} users
+              {userSearch && ` matching "${userSearch}"`}
+              {userRankFilter && ` with rank "${userRankFilter}"`}
+            </small>
+          </div>
+        )}
+      </Card.Body>
+
       <Card.Body>
-        {!users || users.length === 0 ? (
+        {!filteredUsers || filteredUsers.length === 0 ? (
           <div className="text-center text-muted py-5">
-            <div className="mb-3">No users found in the system</div>
+            <div className="mb-3">No users found {userSearch || userRankFilter ? 'matching your criteria' : 'in the system'}</div>
+            {(userSearch || userRankFilter) && (
+              <Button variant="outline-primary" onClick={clearUserFilters} className="me-2">
+                Clear Filters
+              </Button>
+            )}
             <Button variant="primary" onClick={refreshData}>
               Try Again
             </Button>
@@ -431,7 +553,7 @@ function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {users.map(user => (
+              {filteredUsers.map(user => (
                 <tr key={user.id} style={{ cursor: 'pointer' }} onClick={() => handleUserClick(user)}>
                   <td>{user.id}</td>
                   <td>{user.first_name || ''} {user.last_name || ''}</td>
@@ -485,13 +607,74 @@ function AdminDashboard() {
 
   const renderCases = () => (
     <Card className="border-0 shadow-sm">
-      <Card.Header className="bg-white">
-        <h5 className="mb-0 fw-bold">All Cases ({cases?.length || 0})</h5>
+      <Card.Header className="bg-white d-flex justify-content-between align-items-center">
+        <h5 className="mb-0 fw-bold">All Cases ({filteredCases?.length || 0})</h5>
+        <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={loading}>
+          {loading ? <Spinner animation="border" size="sm" /> : '🔄 Refresh'}
+        </Button>
       </Card.Header>
+      
+      {/* Case Search and Filters */}
+      <Card.Body className="border-bottom">
+        <Row className="g-3">
+          <Col md={8}>
+            <Form.Group>
+              <InputGroup>
+                <InputGroup.Text>
+                  <i className="bi bi-search"></i>
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  placeholder="Search cases by case number or ID..."
+                  value={caseSearch}
+                  onChange={(e) => setCaseSearch(e.target.value)}
+                />
+                {(caseSearch || caseTypeFilter) && (
+                  <Button 
+                    variant="outline-secondary" 
+                    onClick={clearCaseFilters}
+                    title="Clear filters"
+                  >
+                    <i className="bi bi-x"></i>
+                  </Button>
+                )}
+              </InputGroup>
+            </Form.Group>
+          </Col>
+          <Col md={4}>
+            <Form.Group>
+              <Form.Select
+                value={caseTypeFilter}
+                onChange={(e) => setCaseTypeFilter(e.target.value)}
+              >
+                <option value="">All Crime Types</option>
+                {getUniqueValues(cases, 'primary_type').map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+        </Row>
+        {(caseSearch || caseTypeFilter) && (
+          <div className="mt-2">
+            <small className="text-muted">
+              Showing {filteredCases.length} of {cases.length} cases
+              {caseSearch && ` matching "${caseSearch}"`}
+              {caseTypeFilter && ` with type "${caseTypeFilter}"`}
+            </small>
+          </div>
+        )}
+      </Card.Body>
+
       <Card.Body>
-        {!cases || cases.length === 0 ? (
+        {!filteredCases || filteredCases.length === 0 ? (
           <div className="text-center text-muted py-5">
-            <div className="mb-3">No cases found in the system</div>
+            <div className="mb-3">No cases found {caseSearch || caseTypeFilter ? 'matching your criteria' : 'in the system'}</div>
+            {(caseSearch || caseTypeFilter) && (
+              <Button variant="outline-primary" onClick={clearCaseFilters} className="me-2">
+                Clear Filters
+              </Button>
+            )}
             <Button variant="primary" onClick={refreshData}>
               Try Again
             </Button>
@@ -501,7 +684,6 @@ function AdminDashboard() {
             <thead>
               <tr>
                 <th>Case ID</th>
-                <th>Title</th>
                 <th>Type</th>
                 <th>Status</th>
                 <th>Location</th>
@@ -510,10 +692,9 @@ function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {cases.map(caseItem => (
+              {filteredCases.map(caseItem => (
                 <tr key={getCaseId(caseItem)}>
                   <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
-                  <td>{getCaseTitle(caseItem)}</td>
                   <td>{getCaseType(caseItem)}</td>
                   <td>
                     <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
