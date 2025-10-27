@@ -5,6 +5,19 @@ from accounts.models import CustomUser, Profile
 from cases.models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
 from accounts.serializers import RegisterSerializer, ProfileSerializer
 from cases.serializers import CaseSerializer, EvidenceSerializer, WitnessSerializer, CriminalRecordSerializer, SuspectPredictionSerializer
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def test_admin_access(request):
+    return Response({
+        'message': 'Admin dashboard access working',
+        'user': request.user.username,
+        'is_superuser': request.user.is_superuser
+    })
+
 
 class AdminOnlyPermission(permissions.BasePermission):
     def has_permission(self, request, view):

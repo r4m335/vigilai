@@ -12,7 +12,6 @@ import {
   Image,
   Button,
   Modal,
-  Form,
   Alert
 } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,10 +20,6 @@ import { logout, getToken } from './cases/services/Authservice';
 function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [cases, setCases] = useState([]);
-  const [evidence, setEvidence] = useState([]);
-  const [witnesses, setWitnesses] = useState([]);
-  const [criminalRecords, setCriminalRecords] = useState([]);
-  const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [profilePhoto, setProfilePhoto] = useState(null);
@@ -34,50 +29,88 @@ function AdminDashboard() {
   const [success, setSuccess] = useState(null);
   const navigate = useNavigate();
 
+  // Simplified stats cards - only users and cases
   const statsCards = [
-    { title: 'Total Users', value: users.length, color: 'primary', icon: '👥' },
-    { title: 'Total Cases', value: cases.length, color: 'success', icon: '📁' },
-    { title: 'Evidence Items', value: evidence.length, color: 'warning', icon: '🔍' },
-    { title: 'Witnesses', value: witnesses.length, color: 'info', icon: '👤' },
-    { title: 'Criminal Records', value: criminalRecords.length, color: 'danger', icon: '📋' },
-    { title: 'Predictions', value: predictions.length, color: 'secondary', icon: '🤖' }
+    { 
+      title: 'Total Users', 
+      value: users?.length || 0, 
+      color: 'primary', 
+      icon: '👥',
+      key: 'users'
+    },
+    { 
+      title: 'Total Cases', 
+      value: cases?.length || 0, 
+      color: 'success', 
+      icon: '📁',
+      key: 'cases'
+    }
   ];
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const token = getToken();
+      
+      if (!token) {
+        setError('No authentication token found. Please login again.');
+        navigate('/login');
+        return;
+      }
+
       const headers = { 
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
-      
-      const [
-        userRes, 
-        caseRes, 
-        evidenceRes, 
-        witnessRes, 
-        criminalRes, 
-        predictionRes
-      ] = await Promise.all([
-        axios.get('/api/admin-dashboard/users/', { headers }),
-        axios.get('/api/admin-dashboard/cases/', { headers }),
-        axios.get('/api/admin-dashboard/evidence/', { headers }),
-        axios.get('/api/admin-dashboard/witnesses/', { headers }),
-        axios.get('/api/admin-dashboard/criminal-records/', { headers }),
-        axios.get('/api/admin-dashboard/predictions/', { headers })
-      ]);
-      
-      setUsers(userRes.data);
-      setCases(caseRes.data);
-      setEvidence(evidenceRes.data);
-      setWitnesses(witnessRes.data);
-      setCriminalRecords(criminalRes.data);
-      setPredictions(predictionRes.data);
+
+      console.log('🔄 Fetching admin dashboard data...');
+
+      // Simplified endpoints - only users and cases
+      const endpoints = [
+        { key: 'users', url: '/api/admin-dashboard/users/' },
+        { key: 'cases', url: '/api/admin-dashboard/cases/' }
+      ];
+
+      // Fetch data for each endpoint
+      const results = await Promise.allSettled(
+        endpoints.map(async (endpoint) => {
+          try {
+            const response = await axios.get(endpoint.url, { headers });
+            const data = response.data || [];
+            return { key: endpoint.key, data };
+          } catch (err) {
+            console.error(`❌ Error fetching ${endpoint.key}:`, err);
+            return { key: endpoint.key, data: [], error: true };
+          }
+        })
+      );
+
+      // Process results safely
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          const { key, data, error } = result.value;
+          if (!error && Array.isArray(data)) {
+            switch (key) {
+              case 'users':
+                setUsers(data);
+                break;
+              case 'cases':
+                setCases(data);
+                break;
+              default:
+                break;
+            }
+          }
+        }
+      });
+
     } catch (err) {
-      console.error('Error fetching admin data:', err);
-      setError('Failed to load admin data. Please check your permissions.');
+      console.error('❌ Error in fetchData:', err);
+      setError('Failed to load admin dashboard. Please check your connection and permissions.');
+      
       if (err.response?.status === 401 || err.response?.status === 403) {
-        navigate('/login');
+        setTimeout(() => navigate('/login'), 2000);
       }
     } finally {
       setLoading(false);
@@ -106,17 +139,20 @@ function AdminDashboard() {
   const handleVerifyUser = async (userId) => {
     try {
       const token = getToken();
-      const response = await axios.patch(`/api/admin-dashboard/users/${userId}/verify/`, {}, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      const response = await axios.patch(
+        `/api/admin-dashboard/users/${userId}/verify/`, 
+        {},
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
       
-      // Use the updated user data from the response
       const updatedUser = response.data.user;
       
-      // Update user list with the fresh data from server
+      // Update user list
       setUsers(users.map(user => 
         user.id === userId ? updatedUser : user
       ));
@@ -127,29 +163,31 @@ function AdminDashboard() {
       }
       
       setSuccess('User verified successfully!');
-      setShowUserModal(false);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error verifying user:', err);
-      setError('Failed to verify user. Please try again.');
-      setTimeout(() => setError(null), 3000);
+      console.error('❌ Error verifying user:', err);
+      setError(err.response?.data?.detail || 'Failed to verify user. Please try again.');
+      setTimeout(() => setError(null), 5000);
     }
   };
 
   const handleUnverifyUser = async (userId) => {
     try {
       const token = getToken();
-      const response = await axios.patch(`/api/admin-dashboard/users/${userId}/unverify/`, {}, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      const response = await axios.patch(
+        `/api/admin-dashboard/users/${userId}/unverify/`, 
+        {},
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
       
-      // Use the updated user data from the response
       const updatedUser = response.data.user;
       
-      // Update user list with the fresh data from server
+      // Update user list
       setUsers(users.map(user => 
         user.id === userId ? updatedUser : user
       ));
@@ -160,26 +198,28 @@ function AdminDashboard() {
       }
       
       setSuccess('User unverified successfully!');
-      setShowUserModal(false);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error unverifying user:', err);
-      setError('Failed to unverify user. Please try again.');
-      setTimeout(() => setError(null), 3000);
+      console.error('❌ Error unverifying user:', err);
+      setError(err.response?.data?.detail || 'Failed to unverify user. Please try again.');
+      setTimeout(() => setError(null), 5000);
     }
   };
 
-  // Refresh data function
   const refreshData = () => {
     setLoading(true);
     fetchData();
   };
 
   const getStatusVariant = (status) => {
-    switch (status?.toLowerCase()) {
+    if (!status) return 'secondary';
+    
+    const statusStr = String(status).toLowerCase();
+    switch (statusStr) {
       case 'open': return 'success';
       case 'closed': return 'secondary';
-      case 'in progress': return 'warning';
+      case 'in progress': 
+      case 'investigating': return 'warning';
       case 'pending': return 'info';
       case 'reopened': return 'danger';
       default: return 'light';
@@ -187,24 +227,72 @@ function AdminDashboard() {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString) return 'Unknown';
+    
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      return 'Invalid Date';
+    }
+  };
+
+  // CORRECTED case data accessor functions based on your Django model
+  const getCaseTitle = (caseItem) => {
+    // Your model doesn't have a title field, use primary_type or description
+    return caseItem?.primary_type || caseItem?.description?.substring(0, 50) + '...' || 'Untitled';
+  };
+
+  const getCaseType = (caseItem) => {
+    return caseItem?.primary_type || 'N/A';
+  };
+
+  const getCaseStatus = (caseItem) => {
+    return caseItem?.status || 'Open';
+  };
+
+  const getCaseLocation = (caseItem) => {
+    return caseItem?.location_description || `District ${caseItem?.district || 'N/A'}`;
+  };
+
+  const getCaseInvestigator = (caseItem) => {
+    if (caseItem?.investigator) {
+      if (typeof caseItem.investigator === 'object') {
+        return `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim() || 'Unknown';
+      }
+      return caseItem.investigator;
+    }
+    return 'Unknown';
+  };
+
+  const getCaseDate = (caseItem) => {
+    return caseItem?.date_time || caseItem?.created_at;
+  };
+
+  const getCaseId = (caseItem) => {
+    return caseItem?.case_id || caseItem?.id || 'N/A';
+  };
+
+  const getCaseNumber = (caseItem) => {
+    return caseItem?.case_number || `#${getCaseId(caseItem)}`;
   };
 
   const renderOverview = () => (
     <div>
       <Row className="mb-4">
         {statsCards.map((stat, index) => (
-          <Col md={4} lg={2} key={index} className="mb-3">
+          <Col md={6} lg={6} key={stat.key || index} className="mb-3">
             <Card className="text-center border-0 shadow-sm h-100">
               <Card.Body className="d-flex flex-column justify-content-center">
                 <div className="mb-2" style={{ fontSize: '2rem' }}>{stat.icon}</div>
-                <Card.Title className={`text-${stat.color} fw-bold`}>{stat.value}</Card.Title>
+                <Card.Title className={`text-${stat.color} fw-bold`}>
+                  {stat.value}
+                </Card.Title>
                 <Card.Text className="text-muted small">{stat.title}</Card.Text>
               </Card.Body>
             </Card>
@@ -217,37 +305,43 @@ function AdminDashboard() {
           <Card className="border-0 shadow-sm">
             <Card.Header className="bg-white d-flex justify-content-between align-items-center">
               <h5 className="mb-0 fw-bold">Recent Users</h5>
-              <Button variant="outline-primary" size="sm" onClick={refreshData}>
-                <i className="bi bi-arrow-clockwise"></i> Refresh
+              <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={loading}>
+                {loading ? <Spinner animation="border" size="sm" /> : '🔄 Refresh'}
               </Button>
             </Card.Header>
             <Card.Body>
-              <Table borderless hover>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Rank</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.slice(0, 5).map(user => (
-                    <tr key={user.id} style={{ cursor: 'pointer' }} onClick={() => handleUserClick(user)}>
-                      <td>{user.first_name} {user.last_name}</td>
-                      <td>{user.email}</td>
-                      <td>
-                        <Badge bg="info">{user.rank || 'User'}</Badge>
-                      </td>
-                      <td>
-                        <Badge bg={user.is_verified ? 'success' : 'warning'}>
-                          {user.is_verified ? 'Verified' : 'Pending'}
-                        </Badge>
-                      </td>
+              {!users || users.length === 0 ? (
+                <div className="text-center text-muted py-3">
+                  No users found
+                </div>
+              ) : (
+                <Table borderless hover responsive>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Rank</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {users.slice(0, 5).map(user => (
+                      <tr key={user.id} style={{ cursor: 'pointer' }} onClick={() => handleUserClick(user)}>
+                        <td>{user.first_name || ''} {user.last_name || ''}</td>
+                        <td>{user.email || 'N/A'}</td>
+                        <td>
+                          <Badge bg="info">{user.rank || 'User'}</Badge>
+                        </td>
+                        <td>
+                          <Badge bg={user.is_verified ? 'success' : 'warning'}>
+                            {user.is_verified ? 'Verified' : 'Pending'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Col>
@@ -258,28 +352,36 @@ function AdminDashboard() {
               <h5 className="mb-0 fw-bold">Recent Cases</h5>
             </Card.Header>
             <Card.Body>
-              <Table borderless hover>
-                <thead>
-                  <tr>
-                    <th>Case ID</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cases.slice(0, 5).map(caseItem => (
-                    <tr key={caseItem.id}>
-                      <td className="fw-semibold">{caseItem.crime_id}</td>
-                      <td>{caseItem.type_of_crime}</td>
-                      <td>
-                        <Badge bg={getStatusVariant(caseItem.status)}>
-                          {caseItem.status}
-                        </Badge>
-                      </td>
+              {!cases || cases.length === 0 ? (
+                <div className="text-center text-muted py-3">
+                  No cases found
+                </div>
+              ) : (
+                <Table borderless hover responsive>
+                  <thead>
+                    <tr>
+                      <th>Case ID</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                      <th>Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {cases.slice(0, 5).map(caseItem => (
+                      <tr key={getCaseId(caseItem)}>
+                        <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
+                        <td>{getCaseType(caseItem)}</td>
+                        <td>
+                          <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
+                            {getCaseStatus(caseItem)}
+                          </Badge>
+                        </td>
+                        <td>{formatDate(getCaseDate(caseItem))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
             </Card.Body>
           </Card>
         </Col>
@@ -291,83 +393,92 @@ function AdminDashboard() {
     <Card className="border-0 shadow-sm">
       <Card.Header className="bg-white d-flex justify-content-between align-items-center">
         <div>
-          <h5 className="mb-0 fw-bold">All Users ({users.length})</h5>
+          <h5 className="mb-0 fw-bold">All Users ({users?.length || 0})</h5>
         </div>
         <div className="d-flex align-items-center gap-2">
           <Badge bg="success" className="me-2">
-            Verified: {users.filter(u => u.is_verified).length}
+            Verified: {users?.filter(u => u.is_verified).length || 0}
           </Badge>
           <Badge bg="warning" className="me-2">
-            Pending: {users.filter(u => !u.is_verified).length}
+            Pending: {users?.filter(u => !u.is_verified).length || 0}
           </Badge>
-          <Button variant="outline-primary" size="sm" onClick={refreshData}>
-            <i className="bi bi-arrow-clockwise"></i> Refresh
+          <Button variant="outline-primary" size="sm" onClick={refreshData} disabled={loading}>
+            {loading ? <Spinner animation="border" size="sm" /> : '🔄 Refresh'}
           </Button>
         </div>
       </Card.Header>
       <Card.Body>
-        <Table striped bordered hover responsive>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Staff ID</th>
-              <th>Rank</th>
-              <th>Verified</th>
-              <th>Date Joined</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.id} style={{ cursor: 'pointer' }} onClick={() => handleUserClick(user)}>
-                <td>{user.id}</td>
-                <td>{user.first_name} {user.last_name}</td>
-                <td>{user.email}</td>
-                <td>{user.phone_number}</td>
-                <td>
-                  <Badge bg="secondary">{user.staff_id}</Badge>
-                </td>
-                <td>
-                  <Badge bg="info">{user.rank}</Badge>
-                </td>
-                <td>
-                  <Badge bg={user.is_verified ? 'success' : 'warning'}>
-                    {user.is_verified ? 'Verified' : 'Pending'}
-                  </Badge>
-                </td>
-                <td>{formatDate(user.date_joined)}</td>
-                <td>
-                  {user.is_verified ? (
-                    <Button 
-                      size="sm" 
-                      variant="warning"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleUnverifyUser(user.id);
-                      }}
-                    >
-                      Unverify
-                    </Button>
-                  ) : (
-                    <Button 
-                      size="sm" 
-                      variant="success"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleVerifyUser(user.id);
-                      }}
-                    >
-                      Verify
-                    </Button>
-                  )}
-                </td>
+        {!users || users.length === 0 ? (
+          <div className="text-center text-muted py-5">
+            <div className="mb-3">No users found in the system</div>
+            <Button variant="primary" onClick={refreshData}>
+              Try Again
+            </Button>
+          </div>
+        ) : (
+          <Table striped bordered hover responsive>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Staff ID</th>
+                <th>Rank</th>
+                <th>Verified</th>
+                <th>Date Joined</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {users.map(user => (
+                <tr key={user.id} style={{ cursor: 'pointer' }} onClick={() => handleUserClick(user)}>
+                  <td>{user.id}</td>
+                  <td>{user.first_name || ''} {user.last_name || ''}</td>
+                  <td>{user.email || 'N/A'}</td>
+                  <td>{user.phone_number || 'N/A'}</td>
+                  <td>
+                    <Badge bg="secondary">{user.staff_id || 'N/A'}</Badge>
+                  </td>
+                  <td>
+                    <Badge bg="info">{user.rank || 'User'}</Badge>
+                  </td>
+                  <td>
+                    <Badge bg={user.is_verified ? 'success' : 'warning'}>
+                      {user.is_verified ? 'Verified' : 'Pending'}
+                    </Badge>
+                  </td>
+                  <td>{formatDate(user.date_joined)}</td>
+                  <td>
+                    {user.is_verified ? (
+                      <Button 
+                        size="sm" 
+                        variant="warning"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUnverifyUser(user.id);
+                        }}
+                      >
+                        Unverify
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="sm" 
+                        variant="success"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleVerifyUser(user.id);
+                        }}
+                      >
+                        Verify
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
       </Card.Body>
     </Card>
   );
@@ -375,39 +486,48 @@ function AdminDashboard() {
   const renderCases = () => (
     <Card className="border-0 shadow-sm">
       <Card.Header className="bg-white">
-        <h5 className="mb-0 fw-bold">All Cases ({cases.length})</h5>
+        <h5 className="mb-0 fw-bold">All Cases ({cases?.length || 0})</h5>
       </Card.Header>
       <Card.Body>
-        <Table striped bordered hover responsive>
-          <thead>
-            <tr>
-              <th>Case ID</th>
-              <th>Title</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>District</th>
-              <th>Ward</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cases.map(caseItem => (
-              <tr key={caseItem.id}>
-                <td className="fw-semibold">{caseItem.crime_id}</td>
-                <td>{caseItem.title}</td>
-                <td>{caseItem.type_of_crime}</td>
-                <td>
-                  <Badge bg={getStatusVariant(caseItem.status)}>
-                    {caseItem.status}
-                  </Badge>
-                </td>
-                <td>{caseItem.district}</td>
-                <td>{caseItem.ward}</td>
-                <td>{formatDate(caseItem.date)}</td>
+        {!cases || cases.length === 0 ? (
+          <div className="text-center text-muted py-5">
+            <div className="mb-3">No cases found in the system</div>
+            <Button variant="primary" onClick={refreshData}>
+              Try Again
+            </Button>
+          </div>
+        ) : (
+          <Table striped bordered hover responsive>
+            <thead>
+              <tr>
+                <th>Case ID</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Location</th>
+                <th>Investigator</th>
+                <th>Date</th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {cases.map(caseItem => (
+                <tr key={getCaseId(caseItem)}>
+                  <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
+                  <td>{getCaseTitle(caseItem)}</td>
+                  <td>{getCaseType(caseItem)}</td>
+                  <td>
+                    <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
+                      {getCaseStatus(caseItem)}
+                    </Badge>
+                  </td>
+                  <td>{getCaseLocation(caseItem)}</td>
+                  <td>{getCaseInvestigator(caseItem)}</td>
+                  <td>{formatDate(getCaseDate(caseItem))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
       </Card.Body>
     </Card>
   );
@@ -421,18 +541,19 @@ function AdminDashboard() {
     }
   };
 
-  if (loading) {
+  if (loading && (!users || users.length === 0)) {
     return (
       <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
         <Navbar bg="white" expand="lg" className="shadow-sm">
           <Container>
-            <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
+            <Navbar.Brand className="fw-bold text-primary">VigilAI Admin</Navbar.Brand>
           </Container>
         </Navbar>
         <Container className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
           <div className="text-center">
-            <Spinner animation="border" variant="primary" className="mb-3" />
+            <Spinner animation="border" variant="primary" className="mb-3" style={{ width: '3rem', height: '3rem' }} />
             <p className="text-muted">Loading admin dashboard...</p>
+            <small className="text-muted">Fetching data from server</small>
           </div>
         </Container>
       </div>
@@ -473,14 +594,20 @@ function AdminDashboard() {
 
       <Container className="py-4">
         {error && (
-          <Alert variant="danger" className="text-center">
-            {error}
+          <Alert variant="danger" className="d-flex justify-content-between align-items-center">
+            <span>{error}</span>
+            <Button variant="outline-danger" size="sm" onClick={() => setError(null)}>
+              ×
+            </Button>
           </Alert>
         )}
         
         {success && (
-          <Alert variant="success" className="text-center">
-            {success}
+          <Alert variant="success" className="d-flex justify-content-between align-items-center">
+            <span>{success}</span>
+            <Button variant="outline-success" size="sm" onClick={() => setSuccess(null)}>
+              ×
+            </Button>
           </Alert>
         )}
 
@@ -504,7 +631,8 @@ function AdminDashboard() {
                     padding: '1rem 1.5rem',
                     border: 'none',
                     background: 'none',
-                    borderBottom: activeTab === tab ? '3px solid #007bff' : '3px solid transparent'
+                    borderBottom: activeTab === tab ? '3px solid #007bff' : '3px solid transparent',
+                    transition: 'all 0.2s ease'
                   }}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -527,19 +655,14 @@ function AdminDashboard() {
               <Row>
                 <Col md={6}>
                   <p><strong>ID:</strong> {selectedUser.id}</p>
-                  <p><strong>Name:</strong> {selectedUser.first_name} {selectedUser.last_name}</p>
-                  <p><strong>Email:</strong> {selectedUser.email}</p>
-                  <p><strong>Username:</strong> {selectedUser.username}</p>
-                  <p><strong>Phone Number:</strong> {selectedUser.phone_number}</p>
+                  <p><strong>Name:</strong> {selectedUser.first_name || ''} {selectedUser.last_name || ''}</p>
+                  <p><strong>Email:</strong> {selectedUser.email || 'N/A'}</p>
+                  <p><strong>Username:</strong> {selectedUser.username || 'N/A'}</p>
+                  <p><strong>Phone Number:</strong> {selectedUser.phone_number || 'N/A'}</p>
                 </Col>
                 <Col md={6}>
-                  <p><strong>Staff ID:</strong> {selectedUser.staff_id}</p>
-                  <p><strong>Rank:</strong> {selectedUser.rank}</p>
-                  <p><strong>Jurisdiction:</strong> 
-                    <a href={selectedUser.jurisdiction} target="_blank" rel="noopener noreferrer" className="ms-2">
-                      View Location
-                    </a>
-                  </p>
+                  <p><strong>Staff ID:</strong> {selectedUser.staff_id || 'N/A'}</p>
+                  <p><strong>Rank:</strong> {selectedUser.rank || 'User'}</p>
                   <p><strong>Verified:</strong> 
                     <Badge bg={selectedUser.is_verified ? 'success' : 'warning'} className="ms-2">
                       {selectedUser.is_verified ? 'Yes' : 'No'}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion, Image } from 'react-bootstrap';
+import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion, Image, Form, InputGroup } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   fetchCases, 
@@ -13,6 +13,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
+  const [filteredCases, setFilteredCases] = useState([]);
   const [caseDetails, setCaseDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,6 +21,14 @@ export default function Dashboard() {
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [predicting, setPredicting] = useState({}); // Track predicting state per case
   const [userIsAdmin, setUserIsAdmin] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState({
+    status: '',
+    crimeType: '',
+    district: '',
+    dateFrom: '',
+    dateTo: ''
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,6 +62,58 @@ export default function Dashboard() {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [navigate]);
+
+  useEffect(() => {
+    // Filter cases based on search term and filters
+    let filtered = cases;
+
+    // Apply search term filter
+    if (searchTerm.trim() !== '') {
+      filtered = filtered.filter(caseItem => 
+        caseItem.case_number?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        caseItem.id?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply status filter
+    if (filters.status) {
+      filtered = filtered.filter(caseItem => caseItem.status === filters.status);
+    }
+
+    // Apply crime type filter
+    if (filters.crimeType) {
+      filtered = filtered.filter(caseItem => 
+        caseItem.primary_type?.toLowerCase().includes(filters.crimeType.toLowerCase())
+      );
+    }
+
+    // Apply district filter
+    if (filters.district) {
+      filtered = filtered.filter(caseItem => 
+        caseItem.district?.toString() === filters.district
+      );
+    }
+
+    // Apply date range filter
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom);
+      filtered = filtered.filter(caseItem => {
+        const caseDate = new Date(caseItem.date_time || caseItem.date || caseItem.created_at);
+        return caseDate >= fromDate;
+      });
+    }
+
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo);
+      toDate.setHours(23, 59, 59, 999); // End of the day
+      filtered = filtered.filter(caseItem => {
+        const caseDate = new Date(caseItem.date_time || caseItem.date || caseItem.created_at);
+        return caseDate <= toDate;
+      });
+    }
+
+    setFilteredCases(filtered);
+  }, [searchTerm, filters, cases]);
 
   const loadProfilePhoto = () => {
     // Try to get profile photo from localStorage
@@ -107,6 +168,7 @@ export default function Dashboard() {
         }));
         
         setCases(formattedCases);
+        setFilteredCases(formattedCases); // Initialize filtered cases
         setLoading(false);
       })
       .catch(err => { 
@@ -145,6 +207,41 @@ export default function Dashboard() {
       console.error('Error loading case details:', err);
       setError('Failed to load case details.');
     }
+  };
+
+  const handleSearch = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+  };
+
+  const handleFilterChange = (filterType, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      status: '',
+      crimeType: '',
+      district: '',
+      dateFrom: '',
+      dateTo: ''
+    });
+    setSearchTerm('');
+  };
+
+  const getUniqueValues = (key) => {
+    const values = cases.map(caseItem => caseItem[key]).filter(Boolean);
+    return [...new Set(values)].sort();
+  };
+
+  const isFilterActive = () => {
+    return Object.values(filters).some(value => value !== '') || searchTerm !== '';
   };
 
   const handlePredict = async (caseItem) => {
@@ -371,24 +468,131 @@ export default function Dashboard() {
 
         <Row className="justify-content-center mb-4">
           <Col lg={10}>
-            <div className="d-flex justify-content-between align-items-center">
+            <div className="d-flex justify-content-between align-items-center mb-3">
               <div>
                 <h2 className="fw-bold text-dark mb-0">Cases Dashboard</h2>
                 {userIsAdmin && (
                   <Badge bg="warning" className="ms-2">Administrator</Badge>
                 )}
               </div>
-              <span className="badge bg-primary">{cases.length} cases</span>
+              <span className="badge bg-primary">{filteredCases.length} {isFilterActive() ? 'filtered' : 'total'} cases</span>
             </div>
             <p className="text-muted">Manage and track all your cases in one place</p>
+
+            {/* Search and Filters */}
+            <Card className="border-0 shadow-sm mb-4">
+              <Card.Body>
+                {/* Search Bar */}
+                <Form.Group className="mb-3">
+                  <InputGroup>
+                    <InputGroup.Text>
+                      <i className="bi bi-search"></i>
+                    </InputGroup.Text>
+                    <Form.Control
+                      type="text"
+                      placeholder="Search by case number or ID..."
+                      value={searchTerm}
+                      onChange={handleSearch}
+                    />
+                    {(searchTerm || isFilterActive()) && (
+                      <Button 
+                        variant="outline-secondary" 
+                        onClick={clearFilters}
+                        title="Clear all filters"
+                      >
+                        <i className="bi bi-x-circle"></i> Clear All
+                      </Button>
+                    )}
+                  </InputGroup>
+                  <Form.Text className="text-muted">
+                    {isFilterActive() && `Found ${filteredCases.length} case(s) matching your criteria`}
+                  </Form.Text>
+                </Form.Group>
+
+                {/* Filters Row */}
+                <Row className="g-3">
+                  {/* Status Filter */}
+                  <Col md={6} lg={3}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">Status</Form.Label>
+                      <Form.Select
+                        value={filters.status}
+                        onChange={(e) => handleFilterChange('status', e.target.value)}
+                      >
+                        <option value="">All Statuses</option>
+                        {getUniqueValues('status').map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+
+                  {/* Crime Type Filter */}
+                  <Col md={6} lg={3}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">Crime Type</Form.Label>
+                      <Form.Select
+                        value={filters.crimeType}
+                        onChange={(e) => handleFilterChange('crimeType', e.target.value)}
+                      >
+                        <option value="">All Crime Types</option>
+                        {getUniqueValues('primary_type').map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+
+                  {/* District Filter */}
+                  <Col md={6} lg={2}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">District</Form.Label>
+                      <Form.Select
+                        value={filters.district}
+                        onChange={(e) => handleFilterChange('district', e.target.value)}
+                      >
+                        <option value="">All Districts</option>
+                        {getUniqueValues('district').map(district => (
+                          <option key={district} value={district}>District {district}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+
+                  {/* Date From Filter */}
+                  <Col md={6} lg={2}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">From Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={filters.dateFrom}
+                        onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* Date To Filter */}
+                  <Col md={6} lg={2}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">To Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={filters.dateTo}
+                        onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </Card.Body>
+            </Card>
           </Col>
         </Row>
 
         <Row className="justify-content-center">
           <Col lg={10}>
-            {cases.length > 0 ? (
+            {filteredCases.length > 0 ? (
               <Accordion activeKey={expandedCase}>
-                {cases.map(c => (
+                {filteredCases.map(c => (
                   <Card key={c.id} className="border-0 shadow-sm auth-card mb-3">
                     <Card.Body className="p-4">
                       <div className="d-flex justify-content-between align-items-start">
@@ -571,8 +775,21 @@ export default function Dashboard() {
                 <Card.Body className="p-4">
                   <div className="text-center py-5">
                     <i className="bi bi-folder-x text-muted" style={{ fontSize: '3rem' }}></i>
-                    <h5 className="mt-3 text-muted">No cases found</h5>
-                    <p className="text-muted">Get started by creating your first case</p>
+                    <h5 className="mt-3 text-muted">
+                      {isFilterActive() ? 'No cases found matching your filters' : 'No cases found'}
+                    </h5>
+                    <p className="text-muted">
+                      {isFilterActive() ? 'Try adjusting your search criteria or clear filters' : 'Get started by creating your first case'}
+                    </p>
+                    {isFilterActive() && (
+                      <Button 
+                        variant="outline-primary" 
+                        onClick={clearFilters}
+                        className="me-2"
+                      >
+                        Clear All Filters
+                      </Button>
+                    )}
                     <Link to="/cases/new" className="btn btn-primary mt-2">
                       Create New Case
                     </Link>

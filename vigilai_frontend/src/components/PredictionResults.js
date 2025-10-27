@@ -142,12 +142,6 @@ function PredictionResults() {
     }
   };
 
-  const handleRegeneratePrediction = async () => {
-    if (caseData) {
-      await generatePrediction(caseData);
-    }
-  };
-
   const handleManualPrediction = async () => {
     if (!manualPrediction.crime_type || !manualPrediction.district) {
       setError('Please fill in at least Crime Type and District');
@@ -235,10 +229,7 @@ function PredictionResults() {
                 <h5>Prediction Error</h5>
                 <p className="mb-3">{error}</p>
                 <div className="d-flex gap-2 justify-content-center flex-wrap">
-                  <Button variant="primary" onClick={() => navigate('/cases')}>
-                    View Cases
-                  </Button>
-                  <Button variant="outline-primary" onClick={() => navigate('/dashboard')}>
+                  <Button variant="primary" onClick={() => navigate('/dashboard')}>
                     Back to Dashboard
                   </Button>
                 </div>
@@ -347,8 +338,8 @@ function PredictionResults() {
           <Alert variant="info" className="text-center">
             <h5>No Prediction Data</h5>
             <p>Please generate a prediction first or select a case.</p>
-            <Button variant="primary" onClick={() => navigate('/cases')}>
-              View Cases
+            <Button variant="primary" onClick={() => navigate('/dashboard')}>
+              Back to Dashboard
             </Button>
           </Alert>
         </Container>
@@ -389,9 +380,6 @@ function PredictionResults() {
             >
               Dashboard
             </Button>
-            <Button variant="primary" onClick={() => navigate('/cases')}>
-              All Cases
-            </Button>
           </div>
         </Container>
       </Navbar>
@@ -430,21 +418,6 @@ function PredictionResults() {
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="fw-bold mb-0">Case Information</h5>
-                    <Button 
-                      variant="outline-primary" 
-                      size="sm" 
-                      onClick={handleRegeneratePrediction}
-                      disabled={regenerating}
-                    >
-                      {regenerating ? (
-                        <>
-                          <Spinner animation="border" size="sm" className="me-2" />
-                          Updating...
-                        </>
-                      ) : (
-                        'Refresh Prediction'
-                      )}
-                    </Button>
                   </div>
                   <Row>
                     <Col md={6}>
@@ -578,25 +551,11 @@ function PredictionResults() {
                         Back to Dashboard
                       </Button>
                       <Button 
-                        variant="outline-secondary" 
-                        onClick={() => navigate('/cases')}
-                      >
-                        View All Cases
-                      </Button>
-                      <Button 
                         variant="success" 
                         onClick={() => window.print()}
                       >
                         Print Report
                       </Button>
-                      {caseData && caseData.id && (
-                        <Button 
-                          variant="outline-primary" 
-                          onClick={() => navigate(`/cases/${caseData.id}`)}
-                        >
-                          View Case Details
-                        </Button>
-                      )}
                     </div>
                   </>
                 ) : (
@@ -606,8 +565,8 @@ function PredictionResults() {
                       The AI could not find strong suspect matches for this case pattern. 
                       This could be due to unique circumstances or limited data for this crime type.
                     </p>
-                    <Button variant="primary" onClick={handleRegeneratePrediction}>
-                      Try Different Parameters
+                    <Button variant="primary" onClick={() => navigate('/dashboard')}>
+                      Back to Dashboard
                     </Button>
                   </Alert>
                 )}

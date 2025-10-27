@@ -15,7 +15,7 @@ urlpatterns = [
     path('api/', include('cases.urls')),
 
     # Admin dashboard (custom, not Django admin)
-    path('api/admin-dashboard/', include('dashboard.urls')),
+    path('api/', include('dashboard.urls')),
     
 
     # API Docs (Swagger / OpenAPI)
