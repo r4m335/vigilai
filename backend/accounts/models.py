@@ -37,6 +37,16 @@ class CustomUser(AbstractUser):
     rank = models.CharField(max_length=50)
     is_verified = models.BooleanField(default=False)
 
+    bio = models.TextField(blank=True, null=True)
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/",
+        blank=True,
+        null=True,
+        default="profile_photos/default.png"
+    )
+    updated_at = models.DateTimeField(default=timezone.now)
+
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name', 'phone_number', 'jurisdiction', 'staff_id', 'rank']
 
@@ -45,34 +55,6 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.staff_id})"
 
-
-class Profile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,primary_key=True)
-    bio = models.TextField(blank=True, null=True)
-    profile_photo = models.ImageField(
-        upload_to="profile_photos/",
-        blank=True,
-        null=True,
-        default="profile_photos/default.png"
-    )
-
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"{self.user.username}'s Profile"
-
     def save(self, *args, **kwargs):
         self.updated_at = timezone.now()
         super().save(*args, **kwargs)
-
-
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_user_profile(sender, instance, created, **kwargs):
-    if created:
-        Profile.objects.create(user=instance)
-
-
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def save_user_profile(sender, instance, **kwargs):
-    instance.profile.save()

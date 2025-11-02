@@ -1,18 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Profile
+from .models import CustomUser
 
-class ProfileInline(admin.StackedInline):
-    model = Profile
-    can_delete = False
-    verbose_name_plural = 'Profile'
-    fk_name = 'user'
 
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     model = CustomUser
-    inlines = [ProfileInline]
 
     # Display fields in list view
     list_display = (
@@ -30,7 +24,7 @@ class CustomUserAdmin(UserAdmin):
         ('Personal Info', {
             'fields': (
                 'first_name', 'last_name', 'phone_number', 
-                'jurisdiction', 'staff_id', 'rank'
+                'jurisdiction', 'staff_id', 'rank','bio', 'profile_photo',
             )
         }),
         ('Permissions', {
@@ -49,7 +43,7 @@ class CustomUserAdmin(UserAdmin):
                 'username', 'email', 'password1', 'password2',
                 'first_name', 'last_name', 'phone_number',
                 'jurisdiction', 'staff_id', 'rank',
-                'is_verified', 'is_staff', 'is_active'
+                'is_verified', 'is_staff', 'is_active','bio', 'profile_photo',
             ),
         }),
     )

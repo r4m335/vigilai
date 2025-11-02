@@ -5,12 +5,12 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.views import (
     CustomTokenObtainPairView,
     RegisterView,
-    ProfileView,
+    UserProfileView,
     LoginView,
 )
 
 router = DefaultRouter()
-router.register(r'profile', ProfileView, basename='profile')
+router.register(r'profile', UserProfileView, basename='user-profile')
 
 urlpatterns = [
      # REST router for profile

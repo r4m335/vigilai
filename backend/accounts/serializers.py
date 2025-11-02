@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import Profile, CustomUser
+from .models import CustomUser
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -45,41 +45,35 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'is_staff': user.is_staff,
             'is_verified': user.is_verified,
             'rank': getattr(user, 'rank', ''),
+            'bio': getattr(user, 'bio', ''),
+            'profile_photo': user.profile_photo.url if user.profile_photo else None,
         }
         return data
 
 
 
 
-class ProfileSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(source='user.first_name', required=False)
-    last_name = serializers.CharField(source='user.last_name', required=False)
-    email = serializers.EmailField(source='user.email', required=False)
-    phone_number = serializers.CharField(source='user.phone_number', required=False)
-    staff_id = serializers.CharField(source='user.staff_id', required=False)
-    jurisdiction = serializers.CharField(source='user.jurisdiction', required=False)
-    rank = serializers.CharField(source='user.rank', required=False)
-
+# -----------------------------------------
+# 🔹 User Serializer (merged Profile fields)
+# -----------------------------------------
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Profile
-        fields = '__all__'
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'phone_number', 'jurisdiction',
+            'staff_id', 'rank', 'is_verified', 'bio', 'profile_photo','updated_at',
+        ]
+        read_only_fields = ['id','updated_at', 'is_verified']
 
     def update(self, instance, validated_data):
-        user_data = validated_data.pop('user', {})
-
-        # Update user fields
-        user = instance.user
-        for attr, value in user_data.items():
-            setattr(user, attr, value)
-        if user_data:
-            user.save(update_fields=user_data.keys())
-
-        # Update profile fields
+        """
+        Allows partial updates of user info (including bio/photo)
+        """
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
         return instance
+    
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])

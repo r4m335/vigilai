@@ -5,15 +5,15 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import (
-    ProfileSerializer,
+    UserSerializer,
     RegisterSerializer,
     CustomTokenObtainPairSerializer
 )
-from .models import Profile, CustomUser
+from .models import CustomUser
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 
 print("🔥 REGISTER VIEW FROM:", __name__)
 @api_view(['GET'])
@@ -52,6 +52,8 @@ class LoginView(APIView):
                 'is_staff': user.is_staff,
                 'is_verified': user.is_verified,
                 'rank': user.rank,
+                'bio': user.bio,
+                'profile_photo': user.profile_photo.url if user.profile_photo else None
             }
         }, status=status.HTTP_200_OK)
 
@@ -67,19 +69,20 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 # --- Profile API ---
-class ProfileView(viewsets.ModelViewSet):
-    serializer_class = ProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
+class UserProfileView(viewsets.ModelViewSet):
+    """
+    Handles CRUD for logged-in user's profile info
+    (now merged into CustomUser model)
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Filter profile for the logged-in user
-        return Profile.objects.filter(user=self.request.user)
+        # User can only view/edit their own info
+        return CustomUser.objects.filter(id=self.request.user.id)
 
     def get_object(self):
-        # Get or create a single profile for the logged-in user
-        profile, _ = Profile.objects.get_or_create(user=self.request.user)
-        return profile
+        return self.request.user
 
     def retrieve(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.get_object())
@@ -92,7 +95,7 @@ class ProfileView(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def list(self, request, *args, **kwargs):
-        # Override list to return a single object instead of a queryset
+        # Return single user profile instead of list
         serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
 

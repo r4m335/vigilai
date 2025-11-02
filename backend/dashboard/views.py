@@ -1,9 +1,9 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from accounts.models import CustomUser, Profile
+from accounts.models import CustomUser
 from cases.models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
-from accounts.serializers import RegisterSerializer, ProfileSerializer
+from accounts.serializers import RegisterSerializer, UserSerializer
 from cases.serializers import CaseSerializer, EvidenceSerializer, WitnessSerializer, CriminalRecordSerializer, SuspectPredictionSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -60,8 +60,8 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
         }, status=status.HTTP_200_OK)
 
 class AdminProfileViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Profile.objects.all().order_by('-created_at')  # Fixed: Use Profile model instead of Case
-    serializer_class = ProfileSerializer
+    queryset = CustomUser.objects.all().order_by('-date_joined')  # Fixed: Use Profile model instead of Case
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
 
 
