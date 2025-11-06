@@ -28,8 +28,8 @@ print(f"\n🎯 Target distribution:\n{train_df['label'].value_counts()}")
 # ---------------------------
 feature_cols = [
     'hour', 'day_of_week', 'is_weekend',
-    'Primary Type', 'Description', 'Location Description',
-    'District', 'Ward', 'same_district', 'suspect_Age'
+    'primary_type', 'description', 'location_description',
+    'district', 'ward', 'same_district', 'criminal_age'
 ]
 
 target_col = 'label'
@@ -41,7 +41,7 @@ for feature in feature_cols:
 # ---------------------------
 # Step 3: Handle categorical features
 # ---------------------------
-categorical_features = ['Primary Type', 'Description', 'Location Description']
+categorical_features = ['primary_type', 'description', 'location_description']
 
 print(f"\n📝 Processing {len(categorical_features)} categorical features...")
 

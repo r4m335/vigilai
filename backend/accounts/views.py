@@ -14,6 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.decorators import action
 
 print("🔥 REGISTER VIEW FROM:", __name__)
 @api_view(['GET'])
@@ -98,6 +99,21 @@ class UserProfileView(viewsets.ModelViewSet):
         # Return single user profile instead of list
         serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get', 'patch'], url_path='me', url_name='me')
+    def me(self, request):
+        """Handles GET/PATCH for the logged-in user"""
+        user = request.user
+
+        if request.method == 'GET':
+            serializer = self.get_serializer(user)
+            return Response(serializer.data)
+
+        elif request.method == 'PATCH':
+            serializer = self.get_serializer(user, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
 
 # --- Registration API ---
 class RegisterView(generics.CreateAPIView):

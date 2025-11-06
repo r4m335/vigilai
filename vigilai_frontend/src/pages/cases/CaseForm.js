@@ -52,7 +52,8 @@ export default function CaseForm() {
     description: '',
     date_time: dateToInputFormat(new Date()),
     location_description: '',
-    status: 'Open',
+    case_status: 'Open',
+    arrest_status: 'Not Arrested',
     district: '',
     ward: ''
   });
@@ -64,7 +65,8 @@ export default function CaseForm() {
   const [newCaseId, setNewCaseId] = useState(null);
   const [profilePhoto, setProfilePhoto] = useState(null);
 
-  const statusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
+  const caseStatusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
+  const arrestStatusOptions = ['Not Arrested', 'Arrested'];
   const crimeTypeOptions = [
     'Burglary',
     'Robbery',
@@ -121,13 +123,18 @@ export default function CaseForm() {
             }
           }
 
+          // Handle backward compatibility for old data
+          const oldStatus = caseData.status || 'Open';
+          const oldIsArrested = caseData.is_arrested || false;
+          
           setFormData({
             case_number: caseData.case_number || '',
             primary_type: caseData.primary_type || '',
             description: caseData.description || '',
             date_time: dateTimeValue,
             location_description: caseData.location_description || '',
-            status: caseData.status || 'Open',
+            case_status: caseData.case_status || oldStatus,
+            arrest_status: caseData.arrest_status || (oldIsArrested ? 'Arrested' : 'Not Arrested'),
             district: caseData.district || '',
             ward: caseData.ward || ''
           });
@@ -280,7 +287,7 @@ export default function CaseForm() {
         return <WitnessForm caseId={currentCaseId} />;
 
       case 'criminal-records':
-        // ✅ Only render CriminalRecordForm when we have a valid caseId
+        // ✅ Only render CriminalRecordForm when we have a valid caseId AND case is arrested
         if (!currentCaseId || currentCaseId === "undefined") {
           return (
             <div className="text-center py-4">
@@ -292,6 +299,27 @@ export default function CaseForm() {
             </div>
           );
         }
+        
+        // Check if case is arrested
+        if (formData.arrest_status !== 'Arrested') {
+          return (
+            <div className="text-center py-4">
+              <i className="bi bi-shield-lock text-muted" style={{ fontSize: '3rem' }}></i>
+              <h6 className="mt-3 text-muted">Arrest Status must be marked as 'Arrested' to add criminal records</h6>
+              <p className="text-muted small">
+                Please update the Arrest Status to 'Arrested' in the Case Details tab to enable criminal record management.
+              </p>
+              <Button 
+                variant="primary" 
+                onClick={() => setActiveTab('case-details')}
+                className="mt-2"
+              >
+                Go to Case Details
+              </Button>
+            </div>
+          );
+        }
+        
         return <CriminalRecordForm caseId={currentCaseId} />;
 
       case 'case-details':
@@ -353,15 +381,15 @@ export default function CaseForm() {
               </Col>
               <Col md={6}>
                 <Form.Group controlId="caseStatus" className="mb-3">
-                  <Form.Label className="fw-semibold">Status *</Form.Label>
+                  <Form.Label className="fw-semibold">Case Status *</Form.Label>
                   <Form.Select
-                    name="status"
-                    value={formData.status}
+                    name="case_status"
+                    value={formData.case_status}
                     onChange={handleChange}
                     className="auth-input"
                     required
                   >
-                    {statusOptions.map(option => (
+                    {caseStatusOptions.map(option => (
                       <option key={option} value={option}>{option}</option>
                     ))}
                   </Form.Select>
@@ -370,6 +398,28 @@ export default function CaseForm() {
             </Row>
 
             <Row>
+              <Col md={6}>
+                <Form.Group controlId="arrestStatus" className="mb-3">
+                  <Form.Label className="fw-semibold">Arrest Status *</Form.Label>
+                  <Form.Select
+                    name="arrest_status"
+                    value={formData.arrest_status}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    {arrestStatusOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </Form.Select>
+                  {formData.arrest_status === 'Arrested' && (
+                    <Form.Text className="text-success">
+                      <i className="bi bi-check-circle me-1"></i>
+                      Case marked as arrested. Criminal records tab is now available.
+                    </Form.Text>
+                  )}
+                </Form.Group>
+              </Col>
               <Col md={6}>
                 <Form.Group controlId="district" className="mb-3">
                   <Form.Label className="fw-semibold">District (1-14) *</Form.Label>
@@ -390,6 +440,9 @@ export default function CaseForm() {
                   </Form.Text>
                 </Form.Group>
               </Col>
+            </Row>
+
+            <Row>
               <Col md={6}>
                 <Form.Group controlId="ward" className="mb-3">
                   <Form.Label className="fw-semibold">Ward (1-42) *</Form.Label>
@@ -462,6 +515,13 @@ export default function CaseForm() {
   // ✅ FIXED: Disable tabs that require a valid caseId
   const isTabDisabled = (tabName) => {
     if (tabName === 'case-details') return false;
+    
+    // Criminal records tab is only available when case is arrested
+    if (tabName === 'criminal-records') {
+      return !isEdit && !newCaseId || (formData.arrest_status !== 'Arrested');
+    }
+    
+    // Other tabs (evidence, witnesses) just need a valid case ID
     return !isEdit && !newCaseId;
   };
 
@@ -619,7 +679,7 @@ export default function CaseForm() {
                         borderBottom: activeTab === 'criminal-records' ? '3px solid #007bff' : '3px solid transparent',
                         cursor: isTabDisabled('criminal-records') ? 'not-allowed' : 'pointer'
                       }}
-                      title={isTabDisabled('criminal-records') ? 'Create the case first to add criminal records' : ''}
+                      title={isTabDisabled('criminal-records') ? 'Arrest Status must be marked as Arrested to add criminal records' : ''}
                     >
                       Criminal Records {isTabDisabled('criminal-records') && <i className="bi bi-lock ms-1"></i>}
                     </button>

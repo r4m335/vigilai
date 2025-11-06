@@ -88,38 +88,40 @@ class Witness(models.Model):
         return f"Witness: {self.name} (Case: {self.case.case_number})"
 
 
-class CriminalRecord(models.Model):
+class Criminal(models.Model):
     criminal_id = models.AutoField(primary_key=True)
-    case = models.ForeignKey(Case, related_name='criminal_records', on_delete=models.CASCADE)
-    person_name = models.CharField(max_length=200)
-    age = models.PositiveSmallIntegerField(
-    null=True, blank=True,
-    validators=[MinValueValidator(10), MaxValueValidator(120)]
+    criminal_name = models.CharField(max_length=200)
+    criminal_age = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(10), MaxValueValidator(120)]
     )
-    
     GENDER_CHOICES = [
         ('Male', 'Male'),
         ('Female', 'Female'),
         ('Other', 'Other'),
     ]
-    gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
-
-    district = models.PositiveSmallIntegerField(
+    criminal_gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
+    criminal_district = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(14)],
-        help_text="District number (1–14)")
-
-    offenses = models.TextField()
-    photo = models.ImageField(
-        upload_to='criminal_photos/',
-        blank=True,
-        null=True,
-        help_text='Upload an image of the criminal'
+        help_text="District number (1–14)"
     )
-
-    created_at = models.DateTimeField(default=timezone.now)
+    aadhaar_number = models.CharField(max_length=12, unique=True)
+    photo = models.ImageField(upload_to='criminal_photos/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.person_name} — Case {self.case.case_number}"
+        return f"{self.criminal_name} ({self.aadhaar_number})"
+
+class CriminalRecord(models.Model):
+    record_id = models.AutoField(primary_key=True)
+    case = models.ForeignKey('cases.Case', on_delete=models.CASCADE, related_name='criminal_records')
+    suspect = models.ForeignKey('cases.Criminal', on_delete=models.CASCADE, related_name='records')
+    offenses = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Record: {self.suspect.criminal_name} (Case #{self.case.case_number})"
+
 
 
 
@@ -127,6 +129,7 @@ class SuspectPrediction(models.Model):
     prediction_id = models.AutoField(primary_key=True)
     case = models.ForeignKey(Case, related_name='predictions', on_delete=models.CASCADE)
     suspect_name = models.CharField(max_length=200)
+    suspect_id = models.IntegerField(null=True, blank=True, help_text="Predicted suspect's ID")
     probability = models.FloatField()  # ML model prediction probability
     created_at = models.DateTimeField(auto_now_add=True)
 

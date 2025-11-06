@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Container, Row, Col, Card, Navbar, Button, Table, 
-  ProgressBar, Alert, Spinner, Badge, Modal, Form 
+  ProgressBar, Alert, Spinner, Badge, Modal, Form,
+  Dropdown, InputGroup
 } from 'react-bootstrap';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { getToken } from '../pages/cases/services/Authservice';
@@ -19,10 +20,17 @@ function PredictionResults() {
   const [predictionData, setPredictionData] = useState(null);
   const [caseData, setCaseData] = useState(null);
   
+  // Sorting and filtering states
+  const [sortField, setSortField] = useState('probability');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [filterDataSource, setFilterDataSource] = useState('all');
+  const [filterRiskLevel, setFilterRiskLevel] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
   // State for manual prediction
   const [manualPrediction, setManualPrediction] = useState({
-    crime_type: '',
-    location: '',
+    primary_type: '',
+    location_description: '',
     district: '',
     ward: '',
     description: ''
@@ -69,7 +77,7 @@ function PredictionResults() {
       const result = await response.json();
       setPredictionData(result);
       
-      // Fetch case details
+      // Fetch case details with more information
       const caseResponse = await fetch(`/api/cases/${id}/`, {
         headers: { 
           'Authorization': `Bearer ${token}`
@@ -97,14 +105,14 @@ function PredictionResults() {
       const token = getToken();
       
       const predictionData = {
-        crime_type: data.crime_type || "THEFT",
+        primary_type: data.primary_type || "THEFT",
         description: data.description || "GENERAL THEFT",
-        location: data.location || "STREET",
+        location_description: data.location_description || "STREET",
         district: parseInt(data.district) || 5,
         ward: parseInt(data.ward) || 10,
         datetime: new Date().toISOString(),
         same_district: 1,
-        suspect_age: 30
+        criminal_age: 30
       };
 
       console.log('Generating prediction with data:', predictionData);
@@ -127,8 +135,8 @@ function PredictionResults() {
       
       setPredictionData(result);
       setCaseData({
-        crime_type: data.crime_type,
-        location: data.location,
+        primary_type: data.primary_type,
+        location_description: data.location_description,
         district: data.district,
         ward: data.ward,
         description: data.description
@@ -143,22 +151,45 @@ function PredictionResults() {
   };
 
   const handleManualPrediction = async () => {
-    if (!manualPrediction.crime_type || !manualPrediction.district) {
+    if (!manualPrediction.primary_type || !manualPrediction.district) {
       setError('Please fill in at least Crime Type and District');
       return;
     }
     await generatePrediction(manualPrediction);
   };
 
-  const handleViewSuspectDetails = (suspect) => {
+  const handleRowClick = (suspect) => {
     setSelectedSuspect(suspect);
     setShowDetails(true);
   };
 
-  const handleAddToInvestigation = (suspect) => {
-    // Implement add to investigation logic
-    console.log('Adding to investigation:', suspect);
-    alert(`Added ${suspect.name} to investigation list`);
+  const handleAddToInvestigation = async (suspect) => {
+    try {
+      const token = getToken();
+      
+      // Create criminal record for this case
+      const response = await fetch('/api/criminal-records/', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          case: caseId,
+          suspect: suspect.criminal_id,
+          offenses: `Linked via AI prediction with ${(suspect.probability * 100).toFixed(1)}% probability`
+        })
+      });
+
+      if (response.ok) {
+        alert(`✅ ${suspect.criminal_name} has been added to the investigation for Case ${caseId}`);
+      } else {
+        throw new Error('Failed to add to investigation');
+      }
+    } catch (err) {
+      console.error('Error adding to investigation:', err);
+      alert(`❌ Failed to add ${suspect.criminal_name} to investigation: ${err.message}`);
+    }
   };
 
   // Helper functions
@@ -186,6 +217,65 @@ function PredictionResults() {
 
   const formatProbability = (prob) => (prob * 100).toFixed(1);
   const formatSimilarity = (sim) => (sim * 100).toFixed(1);
+
+  // Sorting and filtering functions
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortedAndFilteredSuspects = () => {
+    if (!predictionData?.suspects) return [];
+
+    let filtered = [...predictionData.suspects];
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(suspect =>
+        suspect.criminal_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        suspect.criminal_id.toString().includes(searchTerm) ||
+        (suspect.aadhaar_number && suspect.aadhaar_number.includes(searchTerm))
+      );
+    }
+
+    // Apply data source filter
+    if (filterDataSource !== 'all') {
+      filtered = filtered.filter(suspect => suspect.data_source === filterDataSource);
+    }
+
+    // Apply risk level filter
+    if (filterRiskLevel !== 'all') {
+      filtered = filtered.filter(suspect => 
+        suspect.risk_level.toLowerCase().includes(filterRiskLevel.toLowerCase())
+      );
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue = a[sortField];
+      let bValue = b[sortField];
+
+      if (sortField === 'probability' || sortField === 'similarity_score') {
+        aValue = parseFloat(aValue);
+        bValue = parseFloat(bValue);
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  };
+
+  const getSortIcon = (field) => {
+    if (sortField !== field) return '↕️';
+    return sortDirection === 'asc' ? '↑' : '↓';
+  };
 
   // Loading state
   if (loading) {
@@ -247,8 +337,8 @@ function PredictionResults() {
                         <Form.Group className="mb-3">
                           <Form.Label>Crime Type *</Form.Label>
                           <Form.Select 
-                            value={manualPrediction.crime_type}
-                            onChange={(e) => setManualPrediction({...manualPrediction, crime_type: e.target.value})}
+                            value={manualPrediction.primary_type}
+                            onChange={(e) => setManualPrediction({...manualPrediction, primary_type: e.target.value})}
                           >
                             <option value="">Select Crime Type</option>
                             <option value="THEFT">Theft</option>
@@ -265,8 +355,8 @@ function PredictionResults() {
                           <Form.Control 
                             type="text"
                             placeholder="e.g., STREET, GAS STATION, RESIDENCE"
-                            value={manualPrediction.location}
-                            onChange={(e) => setManualPrediction({...manualPrediction, location: e.target.value})}
+                            value={manualPrediction.location_description}
+                            onChange={(e) => setManualPrediction({...manualPrediction, location_description: e.target.value})}
                           />
                         </Form.Group>
                       </Col>
@@ -348,6 +438,7 @@ function PredictionResults() {
   }
 
   const { suspects, analysis, ml_probability, total_candidates_found, model_version, success } = predictionData;
+  const filteredSuspects = getSortedAndFilteredSuspects();
 
   if (!success) {
     return (
@@ -412,24 +503,37 @@ function PredictionResults() {
               </div>
             </div>
 
-            {/* Case Information */}
+            {/* Enhanced Case Information */}
             {caseData && (
               <Card className="border-0 shadow-sm mb-4">
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="fw-bold mb-0">Case Information</h5>
+                    {caseData.case_number && (
+                      <Badge bg="dark" className="fs-6">Case #: {caseData.case_number}</Badge>
+                    )}
                   </div>
                   <Row>
                     <Col md={6}>
-                      <p><strong>Crime Type:</strong> {caseData.primary_type || caseData.crime_type || 'N/A'}</p>
-                      <p><strong>Location:</strong> {caseData.location_description || caseData.location || 'N/A'}</p>
+                      <p><strong>Crime Type:</strong> {caseData.primary_type || 'N/A'}</p>
+                      <p><strong>Location:</strong> {caseData.location_description || 'N/A'}</p>
                       <p><strong>District:</strong> {caseData.district || 'N/A'}</p>
+                      <p><strong>Ward:</strong> {caseData.ward || 'N/A'}</p>
                     </Col>
                     <Col md={6}>
                       <p><strong>Description:</strong> {caseData.description || 'N/A'}</p>
-                      <p><strong>Ward:</strong> {caseData.ward || 'N/A'}</p>
                       {caseData.date_time && (
-                        <p><strong>Date:</strong> {new Date(caseData.date_time).toLocaleDateString()}</p>
+                        <p><strong>Date & Time:</strong> {new Date(caseData.date_time).toLocaleString()}</p>
+                      )}
+                      {caseData.status && (
+                        <p><strong>Status:</strong> <Badge bg={
+                          caseData.status === 'Open' ? 'success' : 
+                          caseData.status === 'In Progress' ? 'warning' : 
+                          caseData.status === 'Closed' ? 'secondary' : 'info'
+                        }>{caseData.status}</Badge></p>
+                      )}
+                      {caseData.investigator && (
+                        <p><strong>Investigator:</strong> {caseData.investigator}</p>
                       )}
                     </Col>
                   </Row>
@@ -442,37 +546,99 @@ function PredictionResults() {
               <Card.Body>
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <h5 className="fw-bold mb-0">Top Suspect Matches</h5>
-                  <Badge bg="primary" className="fs-6">
-                    {suspects.length} High-Probability Matches
-                  </Badge>
+                  <div className="d-flex gap-2">
+                    <Badge bg="primary" className="fs-6">
+                      {filteredSuspects.length} Matches
+                    </Badge>
+                    {filteredSuspects.length !== suspects.length && (
+                      <Badge bg="warning" className="fs-6">
+                        Filtered from {suspects.length}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+
+                {/* Sorting and Filtering Controls */}
+                <Row className="mb-3">
+                  <Col md={4}>
+                    <InputGroup>
+                      <InputGroup.Text>🔍</InputGroup.Text>
+                      <Form.Control
+                        placeholder="Search by name, ID, or Aadhaar..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Select
+                      value={filterDataSource}
+                      onChange={(e) => setFilterDataSource(e.target.value)}
+                    >
+                      <option value="all">All Data Sources</option>
+                      <option value="criminal_database">Criminal Database</option>
+                      <option value="training_data">Historical Data</option>
+                    </Form.Select>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Select
+                      value={filterRiskLevel}
+                      onChange={(e) => setFilterRiskLevel(e.target.value)}
+                    >
+                      <option value="all">All Risk Levels</option>
+                      <option value="high">High Risk</option>
+                      <option value="medium">Medium Risk</option>
+                      <option value="low">Low Risk</option>
+                    </Form.Select>
+                  </Col>
+                </Row>
                 
-                {suspects.length > 0 ? (
+                {filteredSuspects.length > 0 ? (
                   <>
                     <Table striped bordered hover responsive className="align-middle">
                       <thead className="table-dark">
                         <tr>
-                          <th width="5%">Rank</th>
-                          <th width="15%">Suspect</th>
-                          <th width="15%">Probability</th>
-                          <th width="10%">Similarity</th>
-                          <th width="10%">Age</th>
-                          <th width="15%">Location</th>
-                          <th width="10%">Risk</th>
-                          <th width="20%">Actions</th>
+                          <th width="5%" style={{cursor: 'pointer'}} onClick={() => handleSort('rank')}>
+                            Rank {getSortIcon('rank')}
+                          </th>
+                          <th width="25%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_name')}>
+                            Suspect {getSortIcon('criminal_name')}
+                          </th>
+                          <th width="15%" style={{cursor: 'pointer'}} onClick={() => handleSort('probability')}>
+                            Probability {getSortIcon('probability')}
+                          </th>
+                          <th width="10%" style={{cursor: 'pointer'}} onClick={() => handleSort('similarity_score')}>
+                            Similarity {getSortIcon('similarity_score')}
+                          </th>
+                          <th width="10%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_age')}>
+                            Age {getSortIcon('criminal_age')}
+                          </th>
+                          <th width="20%">Location</th>
+                          <th width="15%">Risk</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {suspects.map((suspect, index) => (
-                          <tr key={suspect.suspect_id || index}>
+                        {filteredSuspects.map((suspect, index) => (
+                          <tr 
+                            key={suspect.criminal_id || index}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => handleRowClick(suspect)}
+                            className="hover-row"
+                          >
                             <td className="text-center">
                               <Badge bg="dark" className="fs-6">#{suspect.rank}</Badge>
                             </td>
                             <td>
                               <div>
-                                <strong>{suspect.name}</strong>
+                                <strong>{suspect.criminal_name}</strong>
                                 <br />
-                                <small className="text-muted">ID: {suspect.suspect_id}</small>
+                                <small className="text-muted">ID: {suspect.criminal_id}</small>
+                                {suspect.aadhaar_number && suspect.aadhaar_number !== 'Unknown' && (
+                                  <>
+                                    <br />
+                                    <small className="text-muted">Aadhaar: {suspect.aadhaar_number}</small>
+                                  </>
+                                )}
                               </div>
                             </td>
                             <td>
@@ -491,39 +657,25 @@ function PredictionResults() {
                                 {formatSimilarity(suspect.similarity_score)}% match
                               </Badge>
                             </td>
-                            <td>{suspect.age}</td>
+                            <td>{suspect.criminal_age}</td>
                             <td>
                               <div>
-                                <small>D: {suspect.district}</small>
+                                <small>D: {suspect.criminal_district}</small>
                                 {suspect.ward && suspect.ward !== 'Unknown' && (
                                   <>, W: {suspect.ward}</>
                                 )}
                                 <br />
-                                <small className="text-muted">{suspect.data_source}</small>
+                                <small className="text-muted">
+                                  {suspect.data_source === 'criminal_database' ? 'Criminal DB' : 
+                                   suspect.data_source === 'training_data' ? 'Historical Data' : 
+                                   suspect.data_source}
+                                </small>
                               </div>
                             </td>
                             <td>
                               <Badge className={getRiskBadge(suspect.risk_level) + " w-100"}>
                                 {suspect.risk_level}
                               </Badge>
-                            </td>
-                            <td>
-                              <div className="d-flex gap-1 flex-wrap">
-                                <Button 
-                                  variant="outline-primary" 
-                                  size="sm"
-                                  onClick={() => handleViewSuspectDetails(suspect)}
-                                >
-                                  Details
-                                </Button>
-                                <Button 
-                                  variant="outline-success" 
-                                  size="sm"
-                                  onClick={() => handleAddToInvestigation(suspect)}
-                                >
-                                  Investigate
-                                </Button>
-                              </div>
                             </td>
                           </tr>
                         ))}
@@ -556,18 +708,41 @@ function PredictionResults() {
                       >
                         Print Report
                       </Button>
+                      <Button 
+                        variant="outline-secondary"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setFilterDataSource('all');
+                          setFilterRiskLevel('all');
+                          setSortField('probability');
+                          setSortDirection('desc');
+                        }}
+                      >
+                        Clear Filters
+                      </Button>
                     </div>
                   </>
                 ) : (
                   <Alert variant="info" className="text-center">
-                    <h5>No Strong Matches Found</h5>
+                    <h5>No Matches Found</h5>
                     <p className="mb-3">
-                      The AI could not find strong suspect matches for this case pattern. 
-                      This could be due to unique circumstances or limited data for this crime type.
+                      {suspects.length === 0 
+                        ? "The AI could not find strong suspect matches for this case pattern. This could be due to unique circumstances or limited data for this crime type."
+                        : "No suspects match your current filters. Try adjusting your search criteria."
+                      }
                     </p>
-                    <Button variant="primary" onClick={() => navigate('/dashboard')}>
-                      Back to Dashboard
-                    </Button>
+                    {suspects.length > 0 && (
+                      <Button 
+                        variant="primary" 
+                        onClick={() => {
+                          setSearchTerm('');
+                          setFilterDataSource('all');
+                          setFilterRiskLevel('all');
+                        }}
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
                   </Alert>
                 )}
               </Card.Body>
@@ -580,9 +755,9 @@ function PredictionResults() {
       <Modal show={showDetails} onHide={() => setShowDetails(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
-            Suspect Details - {selectedSuspect?.name}
+            Suspect Details - {selectedSuspect?.criminal_name}
             {selectedSuspect && (
-              <Badge bg="secondary" className="ms-2">{selectedSuspect.suspect_id}</Badge>
+              <Badge bg="secondary" className="ms-2">{selectedSuspect.criminal_id}</Badge>
             )}
           </Modal.Title>
         </Modal.Header>
@@ -595,24 +770,30 @@ function PredictionResults() {
                   <tbody>
                     <tr>
                       <td><strong>Name</strong></td>
-                      <td>{selectedSuspect.name}</td>
+                      <td>{selectedSuspect.criminal_name}</td>
                     </tr>
                     <tr>
                       <td><strong>Age</strong></td>
-                      <td>{selectedSuspect.age}</td>
+                      <td>{selectedSuspect.criminal_age}</td>
                     </tr>
                     <tr>
                       <td><strong>Gender</strong></td>
-                      <td>{selectedSuspect.gender}</td>
+                      <td>{selectedSuspect.criminal_gender}</td>
                     </tr>
                     <tr>
                       <td><strong>District</strong></td>
-                      <td>{selectedSuspect.district}</td>
+                      <td>{selectedSuspect.criminal_district}</td>
                     </tr>
                     <tr>
                       <td><strong>Ward</strong></td>
                       <td>{selectedSuspect.ward}</td>
                     </tr>
+                    {selectedSuspect.aadhaar_number && selectedSuspect.aadhaar_number !== 'Unknown' && (
+                      <tr>
+                        <td><strong>Aadhaar Number</strong></td>
+                        <td>{selectedSuspect.aadhaar_number}</td>
+                      </tr>
+                    )}
                   </tbody>
                 </Table>
               </Col>
@@ -648,7 +829,9 @@ function PredictionResults() {
                       <td><strong>Data Source</strong></td>
                       <td>
                         <Badge bg="secondary">
-                          {selectedSuspect.data_source === 'training_data' ? 'Historical Cases' : 'Active Suspect List'}
+                          {selectedSuspect.data_source === 'criminal_database' ? 'Criminal Database' : 
+                           selectedSuspect.data_source === 'training_data' ? 'Historical Cases' : 
+                           selectedSuspect.data_source}
                         </Badge>
                       </td>
                     </tr>
@@ -660,10 +843,10 @@ function PredictionResults() {
                 <Card className="bg-light">
                   <Card.Body>
                     <p className="mb-1">
-                      <strong>Associated Crime Type:</strong> {selectedSuspect.crime_type}
+                      <strong>Associated Crime Type:</strong> {selectedSuspect.primary_type}
                     </p>
                     <p className="mb-1">
-                      <strong>Common Location:</strong> {selectedSuspect.location}
+                      <strong>Common Location:</strong> {selectedSuspect.location_description}
                     </p>
                     <p className="mb-0">
                       <strong>Match Reason:</strong> High similarity in crime patterns, geographic proximity, and demographic profile.
@@ -678,14 +861,24 @@ function PredictionResults() {
           <Button variant="secondary" onClick={() => setShowDetails(false)}>
             Close
           </Button>
-          <Button variant="primary" onClick={() => {
-            handleAddToInvestigation(selectedSuspect);
-            setShowDetails(false);
-          }}>
-            Add to Investigation
-          </Button>
+          {caseId && (
+            <Button variant="primary" onClick={() => {
+              handleAddToInvestigation(selectedSuspect);
+              setShowDetails(false);
+            }}>
+              Add to Investigation
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
+
+      <style jsx>{`
+        .hover-row:hover {
+          background-color: #f8f9fa !important;
+          transform: translateY(-1px);
+          transition: all 0.2s ease;
+        }
+      `}</style>
     </div>
   );
 }

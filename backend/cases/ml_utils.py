@@ -6,6 +6,10 @@ import logging
 import numpy as np
 from typing import Dict, List, Any, Tuple
 
+# Import Django models
+from django.db import models
+from cases.models import Criminal, SuspectPrediction  # Import your models
+
 # ---------------------------
 # Logging Setup
 # ---------------------------
@@ -20,7 +24,6 @@ MODEL_PATH = r"C:\mini project\vigilai\backend\ml\data\suspect_lightgbm_model.tx
 FEATURES_PATH = r"C:\mini project\vigilai\backend\ml\data\feature_columns.pkl"
 CATEGORY_MAP_PATH = r"C:\mini project\vigilai\backend\ml\data\category_mappings.pkl"
 TRAIN_DATA_PATH = r"C:\mini project\vigilai\backend\ml\data\train.csv"
-SUSPECT_LIST_PATH = r"C:\mini project\vigilai\backend\ml\data\Suspect_list.csv"
 
 # ---------------------------
 # Global Variables
@@ -29,14 +32,14 @@ model = None
 feature_cols = None
 category_mappings = None
 train_data = None
-suspect_list_df = None
+criminal_queryset = None
 
 # ---------------------------
 # Load Model, Metadata and Data
 # ---------------------------
 def load_resources():
     """Load all required resources for prediction"""
-    global model, feature_cols, category_mappings, train_data, suspect_list_df
+    global model, feature_cols, category_mappings, train_data, criminal_queryset
     
     try:
         model = lgb.Booster(model_file=MODEL_PATH)
@@ -48,17 +51,9 @@ def load_resources():
             train_data = pd.read_csv(TRAIN_DATA_PATH)
             logger.info(f"✅ Training data loaded with {len(train_data)} records")
         
-        # Load suspect list
-        if os.path.exists(SUSPECT_LIST_PATH):
-            suspect_list_df = pd.read_csv(SUSPECT_LIST_PATH)
-            suspect_list_df = suspect_list_df.rename(columns={
-                'Suspect_id': 'suspect_id',
-                'Name': 'name', 
-                'Gender': 'gender',
-                'Age': 'age',
-                'District': 'district'
-            })
-            logger.info(f"✅ Suspect list loaded with {len(suspect_list_df)} suspects")
+        # Load criminals from database
+        criminal_queryset = Criminal.objects.all()
+        logger.info(f"✅ Criminal database loaded with {criminal_queryset.count()} criminals")
         
         logger.info("✅ All resources loaded successfully")
         return True
@@ -75,7 +70,7 @@ load_resources()
 # ---------------------------
 def validate_prediction_data(data: Dict) -> Tuple[bool, str]:
     """Validate prediction request data"""
-    required_fields = ['Primary Type', 'District', 'Location Description']
+    required_fields = ['primary_type', 'district', 'location_description']
     
     for field in required_fields:
         if field not in data or data[field] is None:
@@ -83,8 +78,8 @@ def validate_prediction_data(data: Dict) -> Tuple[bool, str]:
     
     # Validate numerical fields
     try:
-        int(data.get('District', 0))
-        int(data.get('Ward', 0))
+        int(data.get('district', 0))
+        int(data.get('ward', 0))
         int(data.get('hour', 0))
         int(data.get('day_of_week', 0))
     except (TypeError, ValueError):
@@ -97,7 +92,7 @@ def validate_prediction_data(data: Dict) -> Tuple[bool, str]:
 # ---------------------------
 def find_similar_suspects_enhanced(case_features: Dict[str, Any], top_n: int = 10) -> List[Dict[str, Any]]:
     """
-    Find similar suspects from both training data and suspect list
+    Find similar suspects from both training data and criminal database
     """
     try:
         all_suspects = []
@@ -107,10 +102,10 @@ def find_similar_suspects_enhanced(case_features: Dict[str, Any], top_n: int = 1
             train_suspects = find_similar_in_training_data(case_features, top_n)
             all_suspects.extend(train_suspects)
         
-        # Search in suspect list
-        if suspect_list_df is not None:
-            list_suspects = find_similar_in_suspect_list(case_features, top_n)
-            all_suspects.extend(list_suspects)
+        # Search in criminal database
+        if criminal_queryset is not None:
+            db_suspects = find_similar_in_criminal_db(case_features, top_n)
+            all_suspects.extend(db_suspects)
         
         # Sort by similarity and remove duplicates
         unique_suspects = remove_duplicate_suspects(all_suspects)
@@ -130,14 +125,14 @@ def find_similar_in_training_data(case_features: Dict[str, Any], top_n: int) -> 
         similarity_score = calculate_similarity_score(case_features, suspect, data_type='training')
         
         similarities.append({
-            'id': suspect.get('suspect_Suspect_id', f'S{idx}'),
-            'name': suspect.get('suspect_Name', 'Unknown'),
-            'age': suspect.get('suspect_Age', 30),
-            'gender': suspect.get('suspect_Gender', 'Unknown'),
-            'district': suspect.get('suspect_District', 'Unknown'),
-            'ward': suspect.get('Ward', 'Unknown'),
-            'crime_type': suspect.get('Primary Type', 'Unknown'),
-            'location': suspect.get('Location Description', 'Unknown'),
+            'id': suspect.get('criminal_id', f'S{idx}'),
+            'name': suspect.get('criminal_name', 'Unknown'),
+            'age': suspect.get('criminal_age', 30),
+            'gender': suspect.get('criminal_gender', 'Unknown'),
+            'district': suspect.get('criminal_district', 'Unknown'),
+            'ward': suspect.get('ward', 'Unknown'),
+            'crime_type': suspect.get('primary_type', 'Unknown'),
+            'location': suspect.get('location_description', 'Unknown'),
             'similarity_score': similarity_score,
             'data_source': 'training_data'
         })
@@ -145,24 +140,35 @@ def find_similar_in_training_data(case_features: Dict[str, Any], top_n: int) -> 
     similarities.sort(key=lambda x: x['similarity_score'], reverse=True)
     return similarities[:top_n]
 
-def find_similar_in_suspect_list(case_features: Dict[str, Any], top_n: int) -> List[Dict[str, Any]]:
-    """Find similar suspects in suspect list"""
+def find_similar_in_criminal_db(case_features: Dict[str, Any], top_n: int) -> List[Dict[str, Any]]:
+    """Find similar suspects in criminal database"""
     similarities = []
     
-    for idx, suspect in suspect_list_df.iterrows():
-        similarity_score = calculate_similarity_score(case_features, suspect, data_type='suspect_list')
+    for criminal in criminal_queryset:
+        # Convert Criminal model instance to dictionary for similarity calculation
+        criminal_dict = {
+            'criminal_id': criminal.criminal_id,
+            'criminal_name': criminal.criminal_name,
+            'criminal_age': criminal.criminal_age or 30,
+            'criminal_gender': criminal.criminal_gender or 'Unknown',
+            'criminal_district': criminal.criminal_district,
+            'aadhaar_number': criminal.aadhaar_number
+        }
+        
+        similarity_score = calculate_similarity_score(case_features, criminal_dict, data_type='criminal_db')
         
         similarities.append({
-            'id': suspect.get('suspect_id', f'SL{idx}'),
-            'name': suspect.get('name', 'Unknown'),
-            'age': suspect.get('age', 30),
-            'gender': suspect.get('gender', 'Unknown'),
-            'district': suspect.get('district', 'Unknown'),
-            'ward': 'Unknown',  # Suspect list doesn't have ward
-            'crime_type': 'Unknown',  # Suspect list doesn't have crime type
+            'id': criminal.criminal_id,
+            'name': criminal.criminal_name,
+            'age': criminal.criminal_age or 30,
+            'gender': criminal.criminal_gender or 'Unknown',
+            'district': criminal.criminal_district,
+            'ward': 'Unknown',  # Criminal table doesn't have ward
+            'crime_type': 'Unknown',  # Criminal table doesn't have crime type
             'location': 'Unknown',
+            'aadhaar_number': criminal.aadhaar_number,
             'similarity_score': similarity_score,
-            'data_source': 'suspect_list'
+            'data_source': 'criminal_database'
         })
     
     similarities.sort(key=lambda x: x['similarity_score'], reverse=True)
@@ -181,7 +187,7 @@ def remove_duplicate_suspects(suspects: List[Dict]) -> List[Dict]:
     
     return unique_suspects
 
-def calculate_similarity_score(case_features: Dict, suspect: pd.Series, data_type: str) -> float:
+def calculate_similarity_score(case_features: Dict, suspect: Dict, data_type: str) -> float:
     """
     Calculate similarity score between case features and suspect
     """
@@ -191,20 +197,20 @@ def calculate_similarity_score(case_features: Dict, suspect: pd.Series, data_typ
     # Different weights based on data source
     if data_type == 'training':
         weights = {
-            'Primary Type': 0.25,
-            'District': 0.20,
-            'Ward': 0.15,
-            'Location Description': 0.15,
-            'suspect_Age': 0.10,
+            'primary_type': 0.25,
+            'district': 0.20,
+            'ward': 0.15,
+            'location_description': 0.15,
+            'criminal_age': 0.10,
             'hour': 0.08,
             'day_of_week': 0.07
         }
-    else:  # suspect_list
+    else:  # criminal_db
         weights = {
-            'District': 0.35,
-            'suspect_Age': 0.25,
-            'Gender': 0.20,
-            'Primary Type': 0.20
+            'district': 0.35,
+            'criminal_age': 0.25,
+            'criminal_gender': 0.20,
+            'primary_type': 0.20
         }
     
     for feature, weight in weights.items():
@@ -212,9 +218,9 @@ def calculate_similarity_score(case_features: Dict, suspect: pd.Series, data_typ
         suspect_value = suspect.get(feature)
         
         if case_value is not None and suspect_value is not None:
-            if feature in ['District', 'Ward', 'hour', 'day_of_week', 'suspect_Age']:
+            if feature in ['district', 'ward', 'hour', 'day_of_week', 'criminal_age']:
                 # Numerical similarity (normalized)
-                if feature == 'suspect_Age':
+                if feature == 'criminal_age':
                     age_diff = abs(int(case_value) - int(suspect_value))
                     age_similarity = max(0, 1 - (age_diff / 50))  # Normalize age difference
                     score += weight * age_similarity
@@ -264,16 +270,16 @@ def prepare_ml_features(request_data: Dict[str, Any]) -> Dict[str, Any]:
     
     # Map request data to ML features
     mapping = {
-        'Primary Type': 'Primary Type',
-        'Description': 'Description', 
-        'Location Description': 'Location Description',
-        'District': 'District',
-        'Ward': 'Ward',
+        'primary_type': 'primary_type',
+        'description': 'description', 
+        'location_description': 'location_description',
+        'district': 'district',
+        'ward': 'ward',
         'hour': 'hour',
         'day_of_week': 'day_of_week',
         'is_weekend': 'is_weekend',
         'same_district': 'same_district',
-        'suspect_Age': 'suspect_Age'
+        'criminal_age': 'criminal_age'
     }
     
     for ml_feature, request_feature in mapping.items():
@@ -314,16 +320,17 @@ def predict_suspects(request_data: Dict[str, Any]) -> Dict[str, Any]:
             
             suspects.append({
                 "rank": i + 1,
-                "suspect_id": suspect['id'],
-                "name": suspect['name'],
+                "criminal_id": suspect['id'],
+                "criminal_name": suspect['name'],
                 "probability": float(combined_probability),
                 "similarity_score": float(suspect['similarity_score']),
-                "age": suspect['age'],
-                "gender": suspect.get('gender', 'Unknown'),
-                "district": suspect['district'],
+                "criminal_age": suspect['age'],
+                "criminal_gender": suspect.get('gender', 'Unknown'),
+                "criminal_district": suspect['district'],
                 "ward": suspect.get('ward', 'Unknown'),
-                "crime_type": suspect.get('crime_type', 'Unknown'),
-                "location": suspect.get('location', 'Unknown'),
+                "primary_type": suspect.get('crime_type', 'Unknown'),
+                "location_description": suspect.get('location', 'Unknown'),
+                "aadhaar_number": suspect.get('aadhaar_number', 'Unknown'),
                 "data_source": suspect.get('data_source', 'unknown'),
                 "risk_level": get_risk_level(combined_probability),
                 "confidence": get_confidence_level(combined_probability)
@@ -338,7 +345,7 @@ def predict_suspects(request_data: Dict[str, Any]) -> Dict[str, Any]:
             "total_candidates_found": len(similar_suspects),
             "analysis": generate_analysis(suspects, ml_probability),
             "success": True,
-            "model_version": "2.0-enhanced"
+            "model_version": "3.0-database-enhanced"
         }
         
         logger.info(f"✅ Prediction completed: {len(suspects)} suspects found")
@@ -381,7 +388,7 @@ def generate_analysis(suspects: List[Dict], ml_probability: float) -> str:
     top_suspect = suspects[0]
     
     analysis = f"AI analysis identified {len(suspects)} potential suspects from criminal databases. "
-    analysis += f"Top match: {top_suspect['name']} with {top_suspect['probability']:.1%} probability. "
+    analysis += f"Top match: {top_suspect['criminal_name']} with {top_suspect['probability']:.1%} probability. "
     
     # Add risk assessment
     if top_suspect['probability'] >= 0.7:
@@ -393,21 +400,85 @@ def generate_analysis(suspects: List[Dict], ml_probability: float) -> str:
     
     # Add pattern insights
     if len(suspects) >= 2:
-        districts = [s['district'] for s in suspects[:3] if s['district'] != 'Unknown']
+        districts = [s['criminal_district'] for s in suspects[:3] if s['criminal_district'] != 'Unknown']
         if districts:
             common_district = max(set(districts), key=districts.count)
             analysis += f" Multiple suspects associated with District {common_district}. "
     
     # Add data source insight
     sources = [s['data_source'] for s in suspects[:3]]
-    if 'training_data' in sources and 'suspect_list' in sources:
-        analysis += "Matches found across both historical cases and active suspect lists."
+    if 'training_data' in sources and 'criminal_database' in sources:
+        analysis += "Matches found across both historical cases and criminal database records."
     elif 'training_data' in sources:
         analysis += "Matches primarily from historical crime pattern analysis."
     else:
-        analysis += "Matches primarily from active suspect monitoring lists."
+        analysis += "Matches primarily from criminal database records."
     
     return analysis
+
+# ---------------------------
+# Function to save predictions to database
+# ---------------------------
+def save_predictions_to_db(case_instance, predictions_data):
+    """
+    Save prediction results to SuspectPrediction model with suspect_id
+    """
+    try:
+        # Clear existing predictions for this case
+        SuspectPrediction.objects.filter(case=case_instance).delete()
+        
+        # Save new predictions
+        saved_count = 0
+        for suspect in predictions_data.get('suspects', []):
+            # Create SuspectPrediction record with suspect_id
+            prediction = SuspectPrediction.objects.create(
+                case=case_instance,
+                suspect_name=suspect['criminal_name'],
+                suspect_id=suspect['criminal_id'],  # Save the criminal_id as suspect_id
+                probability=suspect['probability']
+            )
+            saved_count += 1
+        
+        logger.info(f"✅ Saved {saved_count} predictions to database with suspect IDs")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error saving predictions to database: {e}")
+        return False
+
+# ---------------------------
+# Function to get existing predictions for a case
+# ---------------------------
+def get_predictions_for_case(case_id):
+    """
+    Retrieve existing predictions for a case
+    """
+    try:
+        predictions = SuspectPrediction.objects.filter(case_id=case_id).order_by('-probability')
+        result = []
+        
+        for pred in predictions:
+            result.append({
+                "prediction_id": pred.prediction_id,
+                "suspect_name": pred.suspect_name,
+                "suspect_id": pred.suspect_id,
+                "probability": pred.probability,
+                "created_at": pred.created_at.isoformat() if pred.created_at else None
+            })
+        
+        return {
+            "success": True,
+            "predictions": result,
+            "count": len(result)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching predictions: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "predictions": []
+        }
 
 # ---------------------------
 # Multiple Suspect Prediction (Legacy Support)
@@ -424,18 +495,18 @@ def predict_multiple_suspects(case_data: Dict[str, Any], suspects_list: List[Dic
             combined_data = {**case_data, **suspect}
             
             # Add suspect-specific features
-            combined_data['suspect_Age'] = suspect.get('age', 30)
-            combined_data['same_district'] = 1 if str(suspect.get('district', '')).strip() == str(case_data.get('District', '')).strip() else 0
+            combined_data['criminal_age'] = suspect.get('criminal_age', 30)
+            combined_data['same_district'] = 1 if str(suspect.get('criminal_district', '')).strip() == str(case_data.get('district', '')).strip() else 0
             
             prediction = predict_suspects(combined_data)
             
             if prediction["success"] and prediction["suspects"]:
                 top_match = prediction["suspects"][0]
                 results.append({
-                    "name": suspect.get('name', 'Unknown'),
+                    "criminal_name": suspect.get('criminal_name', 'Unknown'),
                     "probability": top_match['probability'],
-                    "age": suspect.get('age', 'Unknown'),
-                    "district": suspect.get('district', 'Unknown'),
+                    "criminal_age": suspect.get('criminal_age', 'Unknown'),
+                    "criminal_district": suspect.get('criminal_district', 'Unknown'),
                     "risk_level": top_match['risk_level'],
                     "confidence": top_match['confidence']
                 })
@@ -448,7 +519,7 @@ def predict_multiple_suspects(case_data: Dict[str, Any], suspects_list: List[Dic
             top_suspect = results[0]
             analysis = (
                 f"AI analyzed {len(results)} suspects. "
-                f"Top candidate: {top_suspect['name']} "
+                f"Top candidate: {top_suspect['criminal_name']} "
                 f"({top_suspect['probability']:.1%} probability, {top_suspect['risk_level']} risk)."
             )
         else:

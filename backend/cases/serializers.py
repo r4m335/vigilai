@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
+from .models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction, Criminal
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -30,14 +30,44 @@ class WitnessSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# -------------------------------
-# Criminal Record Serializer
-# -------------------------------
+# --- Criminal Serializer ---
+class CriminalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Criminal
+        fields = '__all__'
+        read_only_fields = ['criminal_id', 'created_at']
+
+
+# --- Enhanced Criminal Record Serializer ---
 class CriminalRecordSerializer(serializers.ModelSerializer):
+    suspect = CriminalSerializer(read_only=True)
+    aadhaar_number = serializers.CharField(write_only=True)
+
     class Meta:
         model = CriminalRecord
-        fields = '__all__'
+        fields = [
+            'record_id', 'case', 'suspect', 'aadhaar_number',
+            'offenses', 'created_at'
+        ]
+        read_only_fields = ['record_id', 'created_at', 'suspect']
 
+    def create(self, validated_data):
+        aadhaar = validated_data.pop('aadhaar_number', None)
+
+        suspect, created = Criminal.objects.get_or_create(
+            aadhaar_number=aadhaar,
+            defaults={
+                'person_name': self.initial_data.get('person_name'),
+                'age': self.initial_data.get('age'),
+                'gender': self.initial_data.get('gender'),
+                'district': self.initial_data.get('district'),
+                'photo': self.initial_data.get('photo')
+            }
+        )
+
+        validated_data['suspect'] = suspect
+        record = CriminalRecord.objects.create(**validated_data)
+        return record
 
 # -------------------------------
 # Suspect Prediction Serializer

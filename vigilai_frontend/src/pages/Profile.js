@@ -42,15 +42,12 @@ function Profile() {
       setLoading(true);
       const token = getToken();
       
-      // Get email from login credentials
-      const userEmail = getCurrentUserEmail() || localStorage.getItem('user_email');
-      
-      // Fetch user profile
-      const profileResponse = await axios.get('/api/profile/', {
+      // Fetch user profile from the updated endpoint
+      const profileResponse = await axios.get('/api/profile/me/', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Fetch cases worked by this officer
+      // Fetch cases worked by this officer WITH TRAILING SLASH
       const casesResponse = await axios.get('/api/cases/?worked_by_me=true', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -58,13 +55,15 @@ function Profile() {
       console.log('Profile API Response:', profileResponse.data);
 
       // Set profile data directly from API response
-      setProfile(profileResponse.data);
-      setCases(casesResponse.data);
+      const profileData = profileResponse.data;
+      setProfile(profileData);
+      setCases(casesResponse.data.results || casesResponse.data || []);
       
-      if (profileResponse.data.profile_photo) {
-        const photoUrl = profileResponse.data.profile_photo.startsWith('http') 
-          ? profileResponse.data.profile_photo 
-          : `${window.location.origin}${profileResponse.data.profile_photo}`;
+      // Handle profile photo URL
+      if (profileData.profile_photo) {
+        const photoUrl = profileData.profile_photo.startsWith('http') 
+          ? profileData.profile_photo 
+          : `${window.location.origin}${profileData.profile_photo}`;
         setPhotoPreview(photoUrl);
       }
     } catch (err) {
@@ -117,7 +116,8 @@ function Profile() {
         bio: profile.bio
       });
 
-      const response = await axios.put('/api/profile/', formData, {
+      // PATCH request with updated endpoint
+      const response = await axios.patch('/api/profile/me/', formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -151,15 +151,15 @@ function Profile() {
 
   const handleDashboardClick = () => {
     if (userIsAdmin) {
-      navigate('/admin-dashboard');
+      navigate('/admin-dashboard/');
     } else {
-      navigate('/dashboard');
+      navigate('/dashboard/');
     }
   };
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/login/');
   };
 
   const getStatusBadge = (status) => {
@@ -172,6 +172,41 @@ function Profile() {
     }[status] || 'secondary';
     
     return <Badge bg={variant}>{status}</Badge>;
+  };
+
+  // CORRECTED case data accessor functions based on your Django model
+  const getCaseType = (caseItem) => {
+    return caseItem?.primary_type || 'N/A';
+  };
+
+  const getCaseStatus = (caseItem) => {
+    return caseItem?.status || 'Open';
+  };
+
+  const getCaseLocation = (caseItem) => {
+    return caseItem?.location_description || `District ${caseItem?.district || 'N/A'}`;
+  };
+
+  const getCaseInvestigator = (caseItem) => {
+    if (caseItem?.investigator) {
+      if (typeof caseItem.investigator === 'object') {
+        return `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim() || 'Unknown';
+      }
+      return caseItem.investigator;
+    }
+    return 'Unknown';
+  };
+
+  const getCaseDate = (caseItem) => {
+    return caseItem?.date_time || caseItem?.created_at;
+  };
+
+  const getCaseId = (caseItem) => {
+    return caseItem?.case_id || caseItem?.id || 'N/A';
+  };
+
+  const getCaseNumber = (caseItem) => {
+    return caseItem?.case_number || `#${getCaseId(caseItem)}`;
   };
 
   if (loading) {
@@ -459,20 +494,20 @@ function Profile() {
                     {cases.length > 0 ? (
                       <ListGroup variant="flush">
                         {cases.map((caseItem) => (
-                          <ListGroup.Item key={caseItem.id} className="px-0">
+                          <ListGroup.Item key={getCaseId(caseItem)} className="px-0">
                             <div className="d-flex justify-content-between align-items-start">
                               <div>
-                                <h6 className="fw-bold">#{caseItem.crime_id} - {caseItem.title}</h6>
+                                <h6 className="fw-bold">{getCaseNumber(caseItem)} - {getCaseType(caseItem)}</h6>
                                 <p className="text-muted mb-1">{caseItem.description}</p>
                                 <small className="text-muted">
-                                  Location: {caseItem.location} • Date: {new Date(caseItem.date).toLocaleDateString()}
+                                  Location: {getCaseLocation(caseItem)} • Date: {getCaseDate(caseItem) ? new Date(getCaseDate(caseItem)).toLocaleDateString() : 'No date'}
                                 </small>
                               </div>
                               <div className="text-end">
-                                {getStatusBadge(caseItem.status)}
+                                {getStatusBadge(getCaseStatus(caseItem))}
                                 <br />
                                 <small className="text-muted">
-                                  Investigator: {caseItem.investigator}
+                                  Investigator: {getCaseInvestigator(caseItem)}
                                 </small>
                               </div>
                             </div>
@@ -503,7 +538,7 @@ function Profile() {
               <Col md={3} className="mb-3">
                 <Card className="border-0 shadow-sm text-center">
                   <Card.Body>
-                    <h3 className="fw-bold text-success">{cases.filter(c => c.status === 'Open').length}</h3>
+                    <h3 className="fw-bold text-success">{cases.filter(c => getCaseStatus(c) === 'Open').length}</h3>
                     <p className="text-muted mb-0">Open Cases</p>
                   </Card.Body>
                 </Card>
@@ -511,7 +546,7 @@ function Profile() {
               <Col md={3} className="mb-3">
                 <Card className="border-0 shadow-sm text-center">
                   <Card.Body>
-                    <h3 className="fw-bold text-warning">{cases.filter(c => c.status === 'Pending').length}</h3>
+                    <h3 className="fw-bold text-warning">{cases.filter(c => getCaseStatus(c) === 'Pending').length}</h3>
                     <p className="text-muted mb-0">Pending Cases</p>
                   </Card.Body>
                 </Card>
@@ -519,7 +554,7 @@ function Profile() {
               <Col md={3} className="mb-3">
                 <Card className="border-0 shadow-sm text-center">
                   <Card.Body>
-                    <h3 className="fw-bold text-info">{cases.filter(c => c.status === 'Closed').length}</h3>
+                    <h3 className="fw-bold text-info">{cases.filter(c => getCaseStatus(c) === 'Closed').length}</h3>
                     <p className="text-muted mb-0">Closed Cases</p>
                   </Card.Body>
                 </Card>
