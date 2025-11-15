@@ -1,0 +1,130 @@
+.question-layout {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
+.layout-container {
+  position: relative;
+  height: 600px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.central-image-container {
+  position: relative;
+  z-index: 2;
+}
+
+.central-image {
+  width: 300px;
+  height: 400px;
+  object-fit: cover;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.question-card {
+  position: absolute;
+  max-width: 250px;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+  background: white;
+  z-index: 3;
+  transition: all 0.3s ease;
+}
+
+.question-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.question-text {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #333;
+  margin: 0;
+  text-align: center;
+}
+
+/* Position the cards around the image */
+.top-card {
+  top: 70%;
+  left: 100px;
+  transform: translateY(-50%);
+}
+
+.right-card {
+  top: 70%;
+  right: 100px;
+  transform: translateY(-50%);
+}
+
+.bottom-card {
+  top: 30%;
+  right: 100px;
+  transform: translateY(-50%);
+}
+
+.left-card {
+  top: 30%;
+  left: 100px;
+  transform: translateY(-50%);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .layout-container {
+    height: auto;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .central-image {
+    width: 250px;
+    height: 300px;
+  }
+
+  .question-card {
+    position: relative;
+    max-width: 100%;
+    margin: 10px 0;
+  }
+
+  .top-card,
+  .right-card,
+  .bottom-card,
+  .left-card {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    transform: none;
+  }
+}
+
+/* Animation for card appearance */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.question-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.top-card { animation-delay: 0.1s; }
+.right-card { animation-delay: 0.2s; }
+.bottom-card { animation-delay: 0.3s; }
+.left-card { animation-delay: 0.4s; }

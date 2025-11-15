@@ -1,0 +1,327 @@
+/* HeroPage.css - Optimized & Refined */
+
+/* CSS Variables for Consistent Branding */
+:root {
+  --primary: #0d6efd;
+  --primary-dark: #0a58ca;
+  --primary-light: rgba(13, 110, 253, 0.1);
+  --muted: #6c757d;
+  --dark: #212529;
+  --light: #f8f9fa;
+  --white: #ffffff;
+  --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  --shadow-md: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1);
+  --border-radius: 0.5rem;
+  --transition: all 0.3s ease;
+}
+
+/* Base Typography & Accessibility */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-bottom: 1rem;
+}
+
+p, .lead, li {
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.lead {
+  color: #495057 !important;
+  font-size: 1.1rem;
+}
+
+/* FAQ Section - Consolidated Styles */
+.faq-item {
+  background: var(--white);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  transition: var(--transition);
+  border: 1px solid transparent;
+  margin-bottom: 1rem;
+}
+
+.faq-item:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.faq-item h5 {
+  color: var(--dark);
+  font-size: 1.1rem;
+  cursor: pointer;
+  margin-right: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.faq-item button {
+  outline: none !important;
+  box-shadow: none !important;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.faq-item button:hover {
+  transform: scale(1.1);
+  background: transparent !important;
+}
+
+/* Custom Background Colors */
+.bg-light {
+  background-color: var(--light) !important;
+}
+
+.stats-section-new {
+  background: var(--white) !important;
+}
+
+.stats-section-new .border-top {
+  border-top: 1px solid white !important;
+}
+
+/* Unified Card Hover Effects */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.solution-card,
+.auth-card,
+.position-absolute.card {
+  composes: card-hover;
+  border-radius: var(--border-radius);
+}
+
+/* Solution Cards Specific */
+.solution-card {
+  border: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.solution-card .bg-primary {
+  background-color: var(--white) !important;
+}
+
+.solution-card .text-primary {
+  color: var(--primary) !important;
+}
+
+/* Button Styles with Optimized Transitions */
+.btn-outline-primary {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+  transition: background-color 0.2s, transform 0.2s, color 0.2s;
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--primary);
+  color: var(--white);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 500;
+  transition: background-color 0.2s, transform 0.2s, border-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+  border-color: #0a58ca;
+  transform: translateY(-1px);
+}
+
+.btn-lg {
+  padding: 0.75rem 2rem;
+  font-size: 1.1rem;
+}
+
+/* Hero Section */
+.hero-main-content {
+  position: relative;
+  margin-top: 3rem;
+}
+
+.hero-main-content img {
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  transition: transform 0.3s ease;
+}
+
+.hero-main-content img:hover {
+  transform: scale(1.02);
+}
+
+/* Navbar Styles */
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--primary) !important;
+}
+
+.navbar-nav .nav-link {
+  color: #495057;
+  font-weight: 500;
+  transition: color 0.2s ease-in-out;
+}
+
+.navbar-nav .nav-link:hover {
+  color: var(--primary);
+}
+
+.navbar-shadow {
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Section Spacing */
+.solution-section {
+  padding-top: 1rem !important;
+  padding-bottom: 4rem !important;
+}
+
+.py-5 {
+  padding-top: 3rem !important;
+  padding-bottom: 3rem !important;
+}
+
+/* Statistics Section */
+.stats-section-new .text-primary {
+  color: var(--primary) !important;
+}
+
+.stats-section-new .fw-semibold {
+  font-weight: 600 !important;
+}
+
+/* Footer */
+.bg-dark {
+  background-color: var(--dark) !important;
+}
+
+footer a.text-light:hover {
+  color: var(--primary) !important;
+  transition: color 0.2s ease-in-out;
+}
+
+footer .list-unstyled li {
+  margin-bottom: 0.5rem;
+}
+
+/* Gradient Background */
+.min-vh-100 {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+/* Unified Animation System */
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade 0.4s ease-in;
+}
+
+.faq-item p {
+  animation: fade 0.3s ease-in;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .display-4 {
+    font-size: 2rem;
+  }
+  
+  .lead {
+    font-size: 1rem;
+  }
+  
+  .hero-main-content {
+    margin-top: 2rem;
+    text-align: center;
+  }
+  
+  .solution-section {
+    padding: 3rem 0 !important;
+  }
+  
+  .position-absolute.card {
+    position: relative !important;
+    transform: none !important;
+    margin-bottom: 1.25rem;
+    max-width: 100% !important;
+  }
+  
+  .faq-item,
+  .solution-card {
+    margin-bottom: 1.25rem;
+  }
+  
+  .position-absolute svg {
+    height: 40px !important;
+  }
+}
+
+/* Utility Classes (Extended) */
+.text-muted {
+  color: var(--muted) !important;
+}
+
+.bg-opacity-10 {
+  background-color: var(--primary-light) !important;
+}
+
+.rounded-circle {
+  border-radius: 50% !important;
+}
+
+.shadow-sm {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.border-0 {
+  border: 0 !important;
+}
+
+/* Bootstrap Icons Consistency */
+.bi::before {
+  display: inline-block;
+  font-family: bootstrap-icons !important;
+  font-style: normal;
+  font-weight: normal !important;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  vertical-align: -0.125em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.bi-fs-1 { font-size: 2rem; }
+.bi-fs-4 { font-size: 1.5rem; }
+
+/* Print Styles */
+@media print {
+  .btn, .navbar {
+    display: none !important;
+  }
+}

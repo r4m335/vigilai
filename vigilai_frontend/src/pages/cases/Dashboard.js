@@ -367,7 +367,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
-        <Navbar bg="white" expand="lg" className="shadow-sm">
+        <Navbar bg="white" expand="lg" className="shadow-sm fixed-top">
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
             <div className="ms-auto d-flex align-items-center">
@@ -395,7 +395,7 @@ export default function Dashboard() {
             </div>
           </Container>
         </Navbar>
-        <Container className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
+        <Container className="d-flex justify-content-center align-items-center" style={{ height: '80vh', paddingTop: '80px' }}>
           <div className="text-center">
             <Spinner animation="border" variant="primary" className="mb-3" />
             <p className="text-muted">Loading cases...</p>
@@ -408,7 +408,7 @@ export default function Dashboard() {
   return (
     <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
       {/* Navigation Bar */}
-      <Navbar bg="white" expand="lg" className="shadow-sm">
+      <Navbar bg="white" expand="lg" className="shadow-sm fixed-top">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
@@ -454,7 +454,7 @@ export default function Dashboard() {
         </Container>
       </Navbar>
 
-      <Container className="py-5">
+      <Container className="py-5 fixed-navbar-padding" style={{ paddingTop: '140px' }}>
         {error && (
           <Alert variant="danger" className="text-center">
             {error}
