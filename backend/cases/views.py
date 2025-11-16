@@ -14,6 +14,7 @@ from .serializers import (
     WitnessSerializer,
     CriminalRecordSerializer,
     CriminalSerializer,
+    CriminalRecordCreateSerializer,
 )
 from .permissions import IsOwnerOrReadOnly
 from django.http import JsonResponse
@@ -442,6 +443,9 @@ class WitnessViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(witnesses, many=True)
         return Response(serializer.data)
 
+# -------------------------------
+# Criminal ViewSet
+# -------------------------------
 class CriminalViewSet(viewsets.ModelViewSet):
     """
     CRUD for Criminal (Suspect)
@@ -466,22 +470,70 @@ class CriminalViewSet(viewsets.ModelViewSet):
         stats_view = CriminalStatsView()
         return stats_view.get(request)
 
+# -------------------------------
+# Criminal Record ViewSet (FIXED)
+# -------------------------------
 class CriminalRecordViewSet(viewsets.ModelViewSet):
     """
-    Create or link suspects automatically using Aadhaar
+    Handle criminal records with support for both existing and new criminals
     """
     queryset = CriminalRecord.objects.select_related('case', 'suspect').order_by('-created_at')
-    serializer_class = CriminalRecordSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_class(self):
+        """
+        Use appropriate serializer based on request data
+        """
+        if self.action == 'create':
+            # Check if we're creating with new criminal data
+            request_data = self.request.data
+            if 'criminal_name' in request_data:
+                return CriminalRecordCreateSerializer
+        return CriminalRecordSerializer
+
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        record = serializer.save()
-        return Response({
-            "message": "Criminal record created successfully.",
-            "data": CriminalRecordSerializer(record).data
-        }, status=status.HTTP_201_CREATED)
+        """
+        Create criminal record - handles both existing and new criminals
+        """
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            record = serializer.save()
+            
+            return Response({
+                "message": "Criminal record created successfully.",
+                "data": CriminalRecordSerializer(record).data
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"❌ Criminal record creation error: {str(e)}")
+            return Response(
+                {"error": f"Failed to create criminal record: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def get_queryset(self):
+        """
+        Filter records by case if case_id provided
+        """
+        queryset = super().get_queryset()
+        case_id = self.request.query_params.get('case')
+        if case_id:
+            queryset = queryset.filter(case_id=case_id)
+        return queryset
+
+    @action(detail=False, methods=['get'])
+    def by_case(self, request):
+        """
+        Get all criminal records for a specific case
+        """
+        case_id = request.query_params.get('case')
+        if not case_id:
+            raise ValidationError({"case": "This query parameter is required"})
+        
+        records = CriminalRecord.objects.filter(case_id=case_id).select_related('suspect')
+        serializer = CriminalRecordSerializer(records, many=True)
+        return Response(serializer.data)
 
 # -------------------------------
 # Public Test Endpoint

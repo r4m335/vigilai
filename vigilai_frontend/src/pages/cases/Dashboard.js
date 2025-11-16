@@ -209,6 +209,57 @@ export default function Dashboard() {
     }
   };
 
+  // NEW: Extract criminal details from record with multiple data structure support
+  const getCriminalDisplayInfo = (record) => {
+    console.log('🔍 Processing criminal record:', record); // Debug log
+    
+    // Case 1: Record has suspect_details (from new serializer)
+    if (record.suspect_details) {
+      return {
+        criminal_name: record.suspect_details.criminal_name || 'Unknown',
+        criminal_age: record.suspect_details.criminal_age,
+        criminal_gender: record.suspect_details.criminal_gender,
+        criminal_district: record.suspect_details.criminal_district,
+        photo: record.suspect_details.photo,
+        aadhaar_number: record.suspect_details.aadhaar_number
+      };
+    }
+    
+    // Case 2: Record has suspect object (from old serializer or nested data)
+    if (record.suspect && typeof record.suspect === 'object') {
+      return {
+        criminal_name: record.suspect.criminal_name || 'Unknown',
+        criminal_age: record.suspect.criminal_age,
+        criminal_gender: record.suspect.criminal_gender,
+        criminal_district: record.suspect.criminal_district,
+        photo: record.suspect.photo,
+        aadhaar_number: record.suspect.aadhaar_number
+      };
+    }
+    
+    // Case 3: Record has direct criminal fields (legacy data)
+    if (record.criminal_name || record.person_name) {
+      return {
+        criminal_name: record.criminal_name || record.person_name,
+        criminal_age: record.criminal_age || record.age,
+        criminal_gender: record.criminal_gender || record.gender,
+        criminal_district: record.criminal_district || record.district,
+        photo: record.photo,
+        aadhaar_number: record.aadhaar_number
+      };
+    }
+    
+    // Case 4: Fallback - no criminal data found
+    return {
+      criminal_name: 'Unknown Criminal',
+      criminal_age: null,
+      criminal_gender: null,
+      criminal_district: null,
+      photo: null,
+      aadhaar_number: null
+    };
+  };
+
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
   };
@@ -330,7 +381,12 @@ export default function Dashboard() {
     }
   };
 
-  const handleExpandCase = (caseId) => {
+  const handleCaseClick = (caseId, e) => {
+    // Prevent click event if the click was on action buttons
+    if (e.target.closest('button') || e.target.closest('a')) {
+      return;
+    }
+    
     if (expandedCase === caseId) {
       setExpandedCase(null);
     } else {
@@ -362,6 +418,42 @@ export default function Dashboard() {
     }[status] || 'secondary';
     
     return <Badge bg={variant}>{status}</Badge>;
+  };
+
+  const formatContactInfo = (contactInfo) => {
+    if (!contactInfo) return 'N/A';
+    
+    // Check if it's an email
+    if (contactInfo.includes('@')) {
+      return (
+        <div>
+          <div>{contactInfo}</div>
+          <small>
+            <a href={`mailto:${contactInfo}`} className="text-decoration-none">
+              📧 Send Email
+            </a>
+          </small>
+        </div>
+      );
+    }
+    
+    // Format phone number for display
+    const cleaned = contactInfo.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      const formattedPhone = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+      return (
+        <div>
+          <div>+91 {formattedPhone}</div>
+          <small>
+            <a href={`tel:+91${cleaned}`} className="text-decoration-none">
+              📞 Call
+            </a>
+          </small>
+        </div>
+      );
+    }
+    
+    return contactInfo;
   };
 
   if (loading) {
@@ -408,7 +500,7 @@ export default function Dashboard() {
   return (
     <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
       {/* Navigation Bar */}
-      <Navbar bg="white" expand="lg" className="shadow-sm fixed-top">
+      <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
@@ -422,6 +514,7 @@ export default function Dashboard() {
                 <i className="bi bi-shield-check me-1"></i>Admin Dashboard
               </Button>
             )}
+            
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -440,6 +533,10 @@ export default function Dashboard() {
                   <i className="bi bi-person text-muted"></i>
                 </div>
               )}
+            </Link>
+            {/* 🔍 Criminal Search Button */}
+            <Link to="/criminal-search" className="btn btn-primary btn-sm me-2">
+              <i className="bi bi-search me-1"></i>Criminal Search
             </Link>
             <Link to="/cases/new" className="btn btn-primary btn-sm me-2">
               <i className="bi bi-plus-circle me-1"></i>Create New Case
@@ -593,12 +690,24 @@ export default function Dashboard() {
             {filteredCases.length > 0 ? (
               <Accordion activeKey={expandedCase}>
                 {filteredCases.map(c => (
-                  <Card key={c.id} className="border-0 shadow-sm auth-card mb-3">
-                    <Card.Body className="p-4">
+                  <Card 
+                    key={c.id} 
+                    className="border-0 shadow-sm auth-card mb-3"
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <Card.Body 
+                      className="p-4"
+                      onClick={(e) => handleCaseClick(c.id, e)}
+                    >
                       <div className="d-flex justify-content-between align-items-start">
-                        <div>
+                        <div className="flex-grow-1">
                           <h5 className="fw-bold">
                             {c.case_number ? `#${c.case_number}` : `Case #${c.id}`} - {c.primary_type || c.title || 'Untitled Case'}
+                            {expandedCase === c.id ? (
+                              <i className="bi bi-chevron-up text-muted ms-2" title="Click to collapse"></i>
+                            ) : (
+                              <i className="bi bi-chevron-down text-muted ms-2" title="Click to expand"></i>
+                            )}
                           </h5>
                           <p className="text-muted mb-2">{c.description}</p>
                           <div className="d-flex gap-2 mb-2 flex-wrap">
@@ -622,7 +731,10 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
-                        <div className="d-flex gap-2 flex-wrap">
+                        <div 
+                          className="d-flex gap-2 flex-wrap ms-3"
+                          onClick={(e) => e.stopPropagation()} // Prevent card click when clicking buttons
+                        >
                           <Button 
                             variant="success" 
                             size="sm"
@@ -641,25 +753,24 @@ export default function Dashboard() {
                               </>
                             )}
                           </Button>
+                          
+                          {/* ✏️ Edit Button with Pencil Icon */}
                           <Link 
                             to={`/cases/edit/${c.id}`} 
                             className="btn btn-sm btn-outline-primary"
+                            title="Edit Case"
                           >
-                            Edit
+                            <i className="bi bi-pencil"></i>
                           </Link>
+                          
+                          {/* 🗑️ Delete Button with Trash Icon */}
                           <Button 
                             variant="outline-danger" 
                             size="sm"
                             onClick={() => handleDelete(c.id)}
+                            title="Delete Case"
                           >
-                            Delete
-                          </Button>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            onClick={() => handleExpandCase(c.id)}
-                          >
-                            {expandedCase === c.id ? 'Collapse' : 'View Details'}
+                            <i className="bi bi-trash"></i>
                           </Button>
                         </div>
                       </div>
@@ -699,21 +810,58 @@ export default function Dashboard() {
                             <p className="text-muted mb-4">No evidence recorded.</p>
                           )}
 
-                          {/* Witnesses Section */}
+                          {/* Witnesses Section - UPDATED with Aadhaar and Contact Info */}
                           <h6 className="fw-bold mb-3">Witnesses</h6>
                           {caseDetails[c.id]?.witnesses?.length > 0 ? (
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
                                   <th>Name</th>
+                                  <th>Aadhaar Number</th>
+                                  <th>Contact Information</th>
                                   <th>Statement</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {caseDetails[c.id].witnesses.map(witness => (
-                                  <tr key={witness.id}>
-                                    <td>{witness.name}</td>
-                                    <td>{witness.statement}</td>
+                                  <tr key={witness.id || witness.witness_id}>
+                                    <td>
+                                      <strong>{witness.name}</strong>
+                                    </td>
+                                    <td>
+                                      {witness.aadhaar_number ? (
+                                        <span className="font-monospace">{witness.aadhaar_number}</span>
+                                      ) : (
+                                        <span className="text-muted">Not provided</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {witness.contact_info ? (
+                                        formatContactInfo(witness.contact_info)
+                                      ) : (
+                                        <span className="text-muted">Not provided</span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      <div style={{ maxWidth: '200px' }}>
+                                        {witness.statement.length > 100 ? (
+                                          <>
+                                            {witness.statement.substring(0, 100)}...
+                                            <br />
+                                            <small>
+                                              <button 
+                                                className="btn btn-link p-0 text-decoration-none"
+                                                onClick={() => alert(witness.statement)}
+                                              >
+                                                View full statement
+                                              </button>
+                                            </small>
+                                          </>
+                                        ) : (
+                                          witness.statement
+                                        )}
+                                      </div>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -722,43 +870,64 @@ export default function Dashboard() {
                             <p className="text-muted mb-4">No witness statements recorded.</p>
                           )}
 
-                          {/* Criminal Records Section */}
+                          {/* UPDATED: Criminal Records Section - REMOVED Type and Photo columns */}
                           <h6 className="fw-bold mb-3">Criminal Records</h6>
                           {caseDetails[c.id]?.criminalRecords?.length > 0 ? (
                             <Table striped bordered responsive size="sm" className="mb-4">
                               <thead>
                                 <tr>
-                                  <th>Person Name</th>
+                                  <th>Name</th>
+                                  <th>Aadhaar</th>
                                   <th>Age</th>
                                   <th>Gender</th>
                                   <th>District</th>
                                   <th>Offenses</th>
-                                  <th>Photo</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {caseDetails[c.id].criminalRecords.map(record => (
-                                  <tr key={record.id}>
-                                    <td>{record.person_name}</td>
-                                    <td>{record.age || 'N/A'}</td>
-                                    <td>{record.gender || 'N/A'}</td>
-                                    <td>{record.district ? `District ${record.district}` : 'N/A'}</td>
-                                    <td>{record.offenses}</td>
-                                    <td>
-                                      {record.photo ? (
-                                        <Image 
-                                          src={record.photo} 
-                                          alt={record.person_name}
-                                          fluid 
-                                          style={{ maxHeight: '50px', maxWidth: '50px' }}
-                                          className="border rounded"
-                                        />
-                                      ) : (
-                                        <div className="text-muted">No photo</div>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
+                                {caseDetails[c.id].criminalRecords.map(record => {
+                                  const criminalInfo = getCriminalDisplayInfo(record);
+                                  
+                                  return (
+                                    <tr key={record.record_id || record.id}>
+                                      <td>
+                                        <strong>{criminalInfo.criminal_name}</strong>
+                                      </td>
+                                      <td>
+                                        {criminalInfo.aadhaar_number ? (
+                                          <span className="font-monospace">{criminalInfo.aadhaar_number}</span>
+                                        ) : (
+                                          <span className="text-muted">N/A</span>
+                                        )}
+                                      </td>
+                                      <td>{criminalInfo.criminal_age || 'N/A'}</td>
+                                      <td>{criminalInfo.criminal_gender || 'N/A'}</td>
+                                      <td>
+                                        {criminalInfo.criminal_district ? `District ${criminalInfo.criminal_district}` : 'N/A'}
+                                      </td>
+                                      <td>
+                                        <div style={{ maxWidth: '200px' }}>
+                                          {record.offenses && record.offenses.length > 50 ? (
+                                            <>
+                                              {record.offenses.substring(0, 50)}...
+                                              <br />
+                                              <small>
+                                                <button 
+                                                  className="btn btn-link p-0 text-decoration-none"
+                                                  onClick={() => alert(record.offenses)}
+                                                >
+                                                  View full offenses
+                                                </button>
+                                              </small>
+                                            </>
+                                          ) : (
+                                            record.offenses || 'No offenses description'
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </Table>
                           ) : (

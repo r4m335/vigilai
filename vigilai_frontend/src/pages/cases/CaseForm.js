@@ -55,7 +55,9 @@ export default function CaseForm() {
     case_status: 'Open',
     arrest_status: 'Not Arrested',
     district: '',
-    ward: ''
+    ward: '',
+    local_governance: 'Panchayat', // New field with default
+    governance_name: '' // New field
   });
   const [displayDateTime, setDisplayDateTime] = useState(formatDateTimeForDisplay(new Date()));
   const [loading, setLoading] = useState(isEdit);
@@ -67,6 +69,7 @@ export default function CaseForm() {
 
   const caseStatusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
   const arrestStatusOptions = ['Not Arrested', 'Arrested'];
+  const localGovernanceOptions = ['Panchayat', 'Municipal Corporation']; // New options
   const crimeTypeOptions = [
     'Burglary',
     'Robbery',
@@ -136,7 +139,9 @@ export default function CaseForm() {
             case_status: caseData.case_status || oldStatus,
             arrest_status: caseData.arrest_status || (oldIsArrested ? 'Arrested' : 'Not Arrested'),
             district: caseData.district || '',
-            ward: caseData.ward || ''
+            ward: caseData.ward || '',
+            local_governance: caseData.local_governance || 'Panchayat', // New field with fallback
+            governance_name: caseData.governance_name || '' // New field with fallback
           });
           
           // Set display date time
@@ -463,6 +468,46 @@ export default function CaseForm() {
                   </Form.Text>
                 </Form.Group>
               </Col>
+              <Col md={6}>
+                <Form.Group controlId="localGovernance" className="mb-3">
+                  <Form.Label className="fw-semibold">Local Governance *</Form.Label>
+                  <Form.Select
+                    name="local_governance"
+                    value={formData.local_governance}
+                    onChange={handleChange}
+                    className="auth-input"
+                    required
+                  >
+                    {localGovernanceOptions.map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    Select the type of local governance
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col md={12}>
+                <Form.Group controlId="governanceName" className="mb-3">
+                  <Form.Label className="fw-semibold">
+                    {formData.local_governance === 'Panchayat' ? 'Panchayat Name' : 'Municipal Corporation Name'}
+                  </Form.Label>
+                  <Form.Control
+                    name="governance_name"
+                    type="text"
+                    placeholder={`Enter name of the ${formData.local_governance}`}
+                    value={formData.governance_name}
+                    onChange={handleChange}
+                    className="auth-input"
+                  />
+                  <Form.Text className="text-muted">
+                    Name of the {formData.local_governance}
+                  </Form.Text>
+                </Form.Group>
+              </Col>
             </Row>
 
             <Form.Group controlId="locationDescription" className="mb-3">
@@ -572,9 +617,7 @@ export default function CaseForm() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
-            <Link to="/dashboard" className="btn btn-outline-secondary btn-sm me-2">
-              Dashboard
-            </Link>
+            
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -593,6 +636,9 @@ export default function CaseForm() {
                   <i className="bi bi-person text-muted"></i>
                 </div>
               )}
+            </Link>
+            <Link to="/dashboard" className="btn btn-primary btn-sm me-2">
+              Dashboard
             </Link>
             <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
               Logout

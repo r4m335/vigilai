@@ -21,8 +21,7 @@ import { getToken } from './services/Authservice';
 
 export default function CriminalRecordForm({ caseId }) {
   const [records, setRecords] = useState([]);
-  const [pendingCriminals, setPendingCriminals] = useState([]); // Store multiple criminals before submitting
-  const [step, setStep] = useState(1); // 1: Select/Create Criminal, 2: Review & Submit
+  const [pendingCriminals, setPendingCriminals] = useState([]);
   const [currentCriminal, setCurrentCriminal] = useState({
     suspect: '', // Criminal ID (if existing)
     criminal_name: '',
@@ -31,7 +30,7 @@ export default function CriminalRecordForm({ caseId }) {
     criminal_district: '',
     aadhaar_number: '',
     photo: null,
-    offenses: '' // Offenses for this specific criminal
+    offenses: ''
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -72,6 +71,7 @@ export default function CriminalRecordForm({ caseId }) {
     setLoading(true);
     fetchCriminalRecords(caseId)
       .then(response => {
+        console.log('📦 Criminal records response:', response.data); // Debug log
         const recordsData = Array.isArray(response.data) ? response.data : 
                            (response.data.results || response.data.criminal_records || []);
         setRecords(recordsData);
@@ -117,6 +117,50 @@ export default function CriminalRecordForm({ caseId }) {
     } finally {
       setSearching(false);
     }
+  };
+
+  // NEW: Create a criminal record
+  const createCriminal = async (criminalData) => {
+    const token = getToken();
+    const formData = new FormData();
+    
+    formData.append('criminal_name', criminalData.criminal_name.trim());
+    if (criminalData.criminal_age) formData.append('criminal_age', criminalData.criminal_age);
+    if (criminalData.criminal_gender) formData.append('criminal_gender', criminalData.criminal_gender);
+    if (criminalData.criminal_district) formData.append('criminal_district', criminalData.criminal_district);
+    if (criminalData.aadhaar_number) formData.append('aadhaar_number', criminalData.aadhaar_number);
+    if (criminalData.photo) formData.append('photo', criminalData.photo);
+
+    const response = await fetch('/api/criminals/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to create criminal');
+    }
+
+    return await response.json();
+  };
+
+  // NEW: Create a criminal record (link criminal to case)
+  const createRecord = async (criminalId, offenses) => {
+    const formData = new FormData();
+    formData.append('case', caseId);
+    formData.append('suspect', criminalId);
+    formData.append('offenses', offenses.trim());
+
+    const config = {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      }
+    };
+
+    return await createCriminalRecord(formData, config);
   };
 
   const handleSearchChange = (e) => {
@@ -261,6 +305,7 @@ export default function CriminalRecordForm({ caseId }) {
     removePendingCriminal(index);
   };
 
+  // UPDATED: Submit all criminals with proper two-step process
   const submitAllCriminals = async () => {
     if (pendingCriminals.length === 0) {
       setError('Please add at least one criminal before submitting.');
@@ -271,46 +316,30 @@ export default function CriminalRecordForm({ caseId }) {
     setError(null);
 
     try {
-      const promises = pendingCriminals.map(criminal => {
-        const formDataToSend = new FormData();
-        formDataToSend.append('case', caseId);
-        formDataToSend.append('offenses', criminal.offenses.trim());
-        
+      // Process each criminal sequentially to avoid race conditions
+      for (const criminal of pendingCriminals) {
+        let criminalId;
+
         if (criminal.suspect) {
-          // Using existing criminal
-          formDataToSend.append('suspect', criminal.suspect);
+          // Use existing criminal
+          criminalId = criminal.suspect;
         } else {
-          // Creating new criminal
-          formDataToSend.append('criminal_name', criminal.criminal_name.trim());
-          if (criminal.criminal_age) formDataToSend.append('criminal_age', criminal.criminal_age);
-          if (criminal.criminal_gender) formDataToSend.append('criminal_gender', criminal.criminal_gender);
-          if (criminal.criminal_district) formDataToSend.append('criminal_district', criminal.criminal_district);
-          if (criminal.aadhaar_number) formDataToSend.append('aadhaar_number', criminal.aadhaar_number);
-          if (criminal.photo) {
-            formDataToSend.append('photo', criminal.photo);
-          }
+          // Create new criminal first
+          const newCriminal = await createCriminal(criminal);
+          criminalId = newCriminal.criminal_id;
         }
 
-        const config = {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          }
-        };
+        // Then create the criminal record
+        await createRecord(criminalId, criminal.offenses);
+      }
 
-        return createCriminalRecord(formDataToSend, config);
-      });
-
-      await Promise.all(promises);
       loadRecords();
       setPendingCriminals([]);
       setError(`✅ Successfully added ${pendingCriminals.length} criminal record(s)!`);
       setTimeout(() => setError(null), 4000);
     } catch (err) {
       console.error('Error saving criminal records:', err);
-      const errorMessage = err.response?.data?.message || 
-                         err.response?.data?.detail || 
-                         err.response?.data?.error || 
-                         'Failed to save criminal records. Please try again.';
+      const errorMessage = err.message || 'Failed to save criminal records. Please try again.';
       setError(`❌ ${errorMessage}`);
     } finally {
       setSubmitting(false);
@@ -333,14 +362,13 @@ export default function CriminalRecordForm({ caseId }) {
     setEditingId(null);
     setSearchTerm('');
     setSearchResults([]);
-    setStep(1);
     setActiveTab('search');
   };
 
   const handleEdit = (item) => {
     const suspectInfo = getSuspectDisplayInfo(item);
     setCurrentCriminal({
-      suspect: item.suspect?.criminal_id || '',
+      suspect: item.suspect?.criminal_id || item.suspect || '',
       criminal_name: suspectInfo.criminal_name,
       criminal_age: suspectInfo.criminal_age || '',
       criminal_gender: suspectInfo.criminal_gender || '',
@@ -352,7 +380,7 @@ export default function CriminalRecordForm({ caseId }) {
     
     setPhotoPreview(suspectInfo.photo || null);
     setEditingId(item.record_id || item.id);
-    setPendingCriminals([]); // Clear pending when editing existing record
+    setPendingCriminals([]);
   };
 
   const handleDelete = (id) => {
@@ -370,10 +398,26 @@ export default function CriminalRecordForm({ caseId }) {
     }
   };
 
+  // FIXED: Better suspect display info extraction
   const getSuspectDisplayInfo = (record) => {
-    if (record.suspect) {
+    console.log('🔍 Processing record:', record); // Debug log
+    
+    // Case 1: Record has suspect_details (from new serializer)
+    if (record.suspect_details) {
       return {
-        criminal_name: record.suspect.criminal_name,
+        criminal_name: record.suspect_details.criminal_name || 'Unknown',
+        criminal_age: record.suspect_details.criminal_age,
+        criminal_gender: record.suspect_details.criminal_gender,
+        criminal_district: record.suspect_details.criminal_district,
+        photo: record.suspect_details.photo,
+        aadhaar_number: record.suspect_details.aadhaar_number
+      };
+    }
+    
+    // Case 2: Record has suspect object (from old serializer or nested data)
+    if (record.suspect && typeof record.suspect === 'object') {
+      return {
+        criminal_name: record.suspect.criminal_name || 'Unknown',
         criminal_age: record.suspect.criminal_age,
         criminal_gender: record.suspect.criminal_gender,
         criminal_district: record.suspect.criminal_district,
@@ -381,7 +425,33 @@ export default function CriminalRecordForm({ caseId }) {
         aadhaar_number: record.suspect.aadhaar_number
       };
     }
-    return record;
+    
+    // Case 3: Record has direct criminal fields (legacy data)
+    if (record.criminal_name) {
+      return {
+        criminal_name: record.criminal_name,
+        criminal_age: record.criminal_age,
+        criminal_gender: record.criminal_gender,
+        criminal_district: record.criminal_district,
+        photo: record.photo,
+        aadhaar_number: record.aadhaar_number
+      };
+    }
+    
+    // Case 4: Fallback - no criminal data found
+    return {
+      criminal_name: 'Unknown Criminal',
+      criminal_age: null,
+      criminal_gender: null,
+      criminal_district: null,
+      photo: null,
+      aadhaar_number: null
+    };
+  };
+
+  // NEW: Check if record has linked criminal
+  const hasLinkedCriminal = (record) => {
+    return record.suspect_details || (record.suspect && typeof record.suspect === 'object');
   };
 
   const openSearchModal = () => {
@@ -450,344 +520,341 @@ export default function CriminalRecordForm({ caseId }) {
               <Badge bg="primary" className="me-2">
                 Pending: {pendingCriminals.length}
               </Badge>
-              <Badge bg="secondary">Step {step} of 2</Badge>
+              <Badge bg="secondary">
+                Total Records: {records.length}
+              </Badge>
             </div>
           </div>
 
-          {/* Step 1: Add Criminals */}
-          {step === 1 && (
-            <div>
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(k) => setActiveTab(k)}
-                className="mb-3"
-              >
-                <Tab eventKey="search" title="🔍 Search Existing Criminal">
-                  <div className="p-3 border rounded bg-light">
-                    <h6 className="mb-3">Search Criminal Database</h6>
-                    <Row>
-                      <Col md={8}>
-                        <InputGroup>
-                          <Form.Control
-                            type="text"
-                            placeholder="Search by name or Aadhaar number..."
-                            value={searchTerm}
-                            onChange={handleSearchChange}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSearchSubmit(e)}
-                          />
-                          <Button variant="primary" onClick={handleSearchSubmit} disabled={searching}>
-                            {searching ? <Spinner animation="border" size="sm" /> : 'Search'}
-                          </Button>
-                        </InputGroup>
-                      </Col>
-                      <Col md={4}>
-                        <Button variant="outline-secondary" onClick={openSearchModal}>
-                          🔍 Advanced Search
-                        </Button>
-                      </Col>
-                    </Row>
-
-                    {/* Quick Search Results */}
-                    {searchResults.length > 0 && (
-                      <div className="mt-3">
-                        <h6 className="text-muted">Quick Results ({searchResults.length} found):</h6>
-                        <div className="d-flex flex-wrap gap-2">
-                          {searchResults.slice(0, 3).map(criminal => (
-                            <Card key={criminal.criminal_id} style={{ width: '200px' }} className="shadow-sm">
-                              <Card.Body className="p-2">
-                                <div className="d-flex align-items-center">
-                                  {criminal.photo && (
-                                    <Image 
-                                      src={criminal.photo} 
-                                      alt={criminal.criminal_name}
-                                      fluid 
-                                      style={{ width: '40px', height: '40px', objectFit: 'cover' }}
-                                      className="rounded me-2"
-                                    />
-                                  )}
-                                  <div className="flex-grow-1">
-                                    <strong className="d-block">{criminal.criminal_name}</strong>
-                                    <small className="text-muted">
-                                      {criminal.aadhaar_number ? `Aadhaar: ${criminal.aadhaar_number}` : 'No Aadhaar'}
-                                    </small>
-                                    {criminal.criminal_age && (
-                                      <small className="d-block">Age: {criminal.criminal_age}</small>
-                                    )}
-                                  </div>
-                                </div>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline-primary" 
-                                  className="w-100 mt-2"
-                                  onClick={() => selectCriminal(criminal)}
-                                >
-                                  Select
-                                </Button>
-                              </Card.Body>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {searchTerm && searchResults.length === 0 && !searching && (
-                      <div className="mt-3">
-                        <Alert variant="info" className="py-2 d-flex justify-content-between align-items-center">
-                          <span>No criminals found matching "{searchTerm}"</span>
-                          <Button 
-                            variant="primary" 
-                            size="sm"
-                            onClick={createNewCriminal}
-                          >
-                            Create New Criminal
-                          </Button>
-                        </Alert>
-                      </div>
-                    )}
-                  </div>
-                </Tab>
-
-                <Tab eventKey="create" title="👤 Create New Criminal">
-                  <Form>
-                    <Row>
-                      <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Criminal Name *</Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="criminal_name"
-                            value={currentCriminal.criminal_name}
-                            onChange={handleCriminalChange}
-                            placeholder="Enter full name"
-                            required
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={6}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Aadhaar Number</Form.Label>
-                          <Form.Control
-                            type="text"
-                            name="aadhaar_number"
-                            value={currentCriminal.aadhaar_number}
-                            onChange={handleCriminalChange}
-                            placeholder="12-digit Aadhaar number"
-                            maxLength={12}
-                          />
-                        </Form.Group>
-                      </Col>
-                    </Row>
-
-                    <Row>
-                      <Col md={4}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Age</Form.Label>
-                          <Form.Control
-                            type="number"
-                            name="criminal_age"
-                            value={currentCriminal.criminal_age}
-                            onChange={handleCriminalChange}
-                            placeholder="Age"
-                            min="10"
-                            max="120"
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col md={4}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Gender</Form.Label>
-                          <Form.Select
-                            name="criminal_gender"
-                            value={currentCriminal.criminal_gender}
-                            onChange={handleCriminalChange}
-                          >
-                            {genderOptions.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                      <Col md={4}>
-                        <Form.Group className="mb-3">
-                          <Form.Label>District</Form.Label>
-                          <Form.Select
-                            name="criminal_district"
-                            value={currentCriminal.criminal_district}
-                            onChange={handleCriminalChange}
-                          >
-                            {districtOptions.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                    </Row>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>Photo</Form.Label>
+          <Tabs
+            activeKey={activeTab}
+            onSelect={(k) => setActiveTab(k)}
+            className="mb-3"
+          >
+            <Tab eventKey="search" title="🔍 Search Existing Criminal">
+              <div className="p-3 border rounded bg-light">
+                <h6 className="mb-3">Search Criminal Database</h6>
+                <Row>
+                  <Col md={8}>
+                    <InputGroup>
                       <Form.Control
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoChange}
+                        type="text"
+                        placeholder="Search by name or Aadhaar number..."
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSearchSubmit(e)}
                       />
-                      {photoPreview && (
-                        <div className="mt-2">
-                          <Image 
-                            src={photoPreview} 
-                            alt="Preview" 
-                            fluid 
-                            style={{ maxHeight: '150px' }}
-                            className="rounded border"
-                          />
-                        </div>
-                      )}
-                    </Form.Group>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>Offenses Description *</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        name="offenses"
-                        value={currentCriminal.offenses}
-                        onChange={handleOffensesChange}
-                        placeholder="Describe the offenses committed by this criminal in detail..."
-                        required
-                      />
-                    </Form.Group>
-
-                    <div className="d-flex justify-content-between">
-                      <Button 
-                        variant="outline-secondary"
-                        onClick={() => {
-                          setCurrentCriminal({
-                            suspect: '',
-                            criminal_name: '',
-                            criminal_age: '',
-                            criminal_gender: '',
-                            criminal_district: '',
-                            aadhaar_number: '',
-                            photo: null,
-                            offenses: ''
-                          });
-                          setPhotoPreview(null);
-                          setActiveTab('search');
-                        }}
-                      >
-                        Cancel
+                      <Button variant="primary" onClick={handleSearchSubmit} disabled={searching}>
+                        {searching ? <Spinner animation="border" size="sm" /> : 'Search'}
                       </Button>
-                      <Button 
-                        variant="primary"
-                        onClick={addCriminalToList}
-                      >
-                        Add to List
-                      </Button>
-                    </div>
-                  </Form>
-                </Tab>
-              </Tabs>
+                    </InputGroup>
+                  </Col>
+                  <Col md={4}>
+                    <Button variant="outline-secondary" onClick={openSearchModal}>
+                      🔍 Advanced Search
+                    </Button>
+                  </Col>
+                </Row>
 
-              {/* Pending Criminals List */}
-              {pendingCriminals.length > 0 && (
-                <Card className="mt-4">
-                  <Card.Header>
-                    <h6 className="mb-0">
-                      Pending Criminal Records ({pendingCriminals.length})
-                      <Badge bg="primary" className="ms-2">
-                        Ready to Submit
-                      </Badge>
-                    </h6>
-                  </Card.Header>
-                  <Card.Body>
-                    <ListGroup variant="flush">
-                      {pendingCriminals.map((criminal, index) => (
-                        <ListGroup.Item key={criminal.id} className="d-flex justify-content-between align-items-start">
-                          <div className="flex-grow-1">
-                            <div className="d-flex align-items-center mb-2">
-                              {criminal.photoPreview && (
+                {/* Quick Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="mt-3">
+                    <h6 className="text-muted">Quick Results ({searchResults.length} found):</h6>
+                    <div className="d-flex flex-wrap gap-2">
+                      {searchResults.slice(0, 3).map(criminal => (
+                        <Card key={criminal.criminal_id} style={{ width: '200px' }} className="shadow-sm">
+                          <Card.Body className="p-2">
+                            <div className="d-flex align-items-center">
+                              {criminal.photo && (
                                 <Image 
-                                  src={criminal.photoPreview} 
+                                  src={criminal.photo} 
                                   alt={criminal.criminal_name}
                                   fluid 
                                   style={{ width: '40px', height: '40px', objectFit: 'cover' }}
-                                  className="rounded me-3"
+                                  className="rounded me-2"
                                 />
                               )}
-                              <div>
-                                <strong>{criminal.criminal_name}</strong>
-                                {criminal.suspect && (
-                                  <Badge bg="success" className="ms-2" title="Existing criminal">
-                                    EXISTING
-                                  </Badge>
+                              <div className="flex-grow-1">
+                                <strong className="d-block">{criminal.criminal_name}</strong>
+                                <small className="text-muted">
+                                  {criminal.aadhaar_number ? `Aadhaar: ${criminal.aadhaar_number}` : 'No Aadhaar'}
+                                </small>
+                                {criminal.criminal_age && (
+                                  <small className="d-block">Age: {criminal.criminal_age}</small>
                                 )}
-                                {!criminal.suspect && (
-                                  <Badge bg="info" className="ms-2" title="New criminal">
-                                    NEW
-                                  </Badge>
-                                )}
-                                <div className="text-muted small">
-                                  {criminal.aadhaar_number && `Aadhaar: ${criminal.aadhaar_number} • `}
-                                  {criminal.criminal_age && `Age: ${criminal.criminal_age} • `}
-                                  {criminal.criminal_gender && `Gender: ${criminal.criminal_gender}`}
-                                </div>
-                                <div className="small mt-1">
-                                  <strong>Offenses:</strong> {criminal.offenses.length > 100 
-                                    ? `${criminal.offenses.substring(0, 100)}...` 
-                                    : criminal.offenses}
-                                </div>
                               </div>
                             </div>
-                          </div>
-                          <div className="d-flex flex-column gap-1">
                             <Button 
                               size="sm" 
-                              variant="outline-warning"
-                              onClick={() => editPendingCriminal(index)}
+                              variant="outline-primary" 
+                              className="w-100 mt-2"
+                              onClick={() => selectCriminal(criminal)}
                             >
-                              Edit
+                              Select
                             </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline-danger"
-                              onClick={() => removePendingCriminal(index)}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </ListGroup.Item>
+                          </Card.Body>
+                        </Card>
                       ))}
-                    </ListGroup>
-                    <div className="d-flex justify-content-between mt-3">
-                      <Button 
-                        variant="outline-danger"
-                        onClick={() => setPendingCriminals([])}
-                        disabled={pendingCriminals.length === 0}
-                      >
-                        Clear All
-                      </Button>
-                      <Button 
-                        variant="success"
-                        onClick={submitAllCriminals}
-                        disabled={pendingCriminals.length === 0 || submitting}
-                      >
-                        {submitting ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-2" />
-                            Submitting {pendingCriminals.length} Record(s)...
-                          </>
-                        ) : (
-                          `Submit ${pendingCriminals.length} Criminal Record(s)`
-                        )}
-                      </Button>
                     </div>
-                  </Card.Body>
-                </Card>
-              )}
-            </div>
+                  </div>
+                )}
+
+                {searchTerm && searchResults.length === 0 && !searching && (
+                  <div className="mt-3">
+                    <Alert variant="info" className="py-2 d-flex justify-content-between align-items-center">
+                      <span>No criminals found matching "{searchTerm}"</span>
+                      <Button 
+                        variant="primary" 
+                        size="sm"
+                        onClick={createNewCriminal}
+                      >
+                        Create New Criminal
+                      </Button>
+                    </Alert>
+                  </div>
+                )}
+              </div>
+            </Tab>
+
+            <Tab eventKey="create" title="👤 Create New Criminal">
+              <Form>
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Criminal Name *</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="criminal_name"
+                        value={currentCriminal.criminal_name}
+                        onChange={handleCriminalChange}
+                        placeholder="Enter full name"
+                        required
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Aadhaar Number</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="aadhaar_number"
+                        value={currentCriminal.aadhaar_number}
+                        onChange={handleCriminalChange}
+                        placeholder="12-digit Aadhaar number"
+                        maxLength={12}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Age</Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="criminal_age"
+                        value={currentCriminal.criminal_age}
+                        onChange={handleCriminalChange}
+                        placeholder="Age"
+                        min="10"
+                        max="120"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Gender</Form.Label>
+                      <Form.Select
+                        name="criminal_gender"
+                        value={currentCriminal.criminal_gender}
+                        onChange={handleCriminalChange}
+                      >
+                        {genderOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>District</Form.Label>
+                      <Form.Select
+                        name="criminal_district"
+                        value={currentCriminal.criminal_district}
+                        onChange={handleCriminalChange}
+                      >
+                        {districtOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Photo</Form.Label>
+                  <Form.Control
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                  />
+                  {photoPreview && (
+                    <div className="mt-2">
+                      <Image 
+                        src={photoPreview} 
+                        alt="Preview" 
+                        fluid 
+                        style={{ maxHeight: '150px' }}
+                        className="rounded border"
+                      />
+                    </div>
+                  )}
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Offenses Description *</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    name="offenses"
+                    value={currentCriminal.offenses}
+                    onChange={handleOffensesChange}
+                    placeholder="Describe the offenses committed by this criminal in detail..."
+                    required
+                  />
+                </Form.Group>
+
+                <div className="d-flex justify-content-between">
+                  <Button 
+                    variant="outline-secondary"
+                    onClick={() => {
+                      setCurrentCriminal({
+                        suspect: '',
+                        criminal_name: '',
+                        criminal_age: '',
+                        criminal_gender: '',
+                        criminal_district: '',
+                        aadhaar_number: '',
+                        photo: null,
+                        offenses: ''
+                      });
+                      setPhotoPreview(null);
+                      setActiveTab('search');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    onClick={addCriminalToList}
+                  >
+                    Add to List
+                  </Button>
+                </div>
+              </Form>
+            </Tab>
+          </Tabs>
+
+          {/* Pending Criminals List */}
+          {pendingCriminals.length > 0 && (
+            <Card className="mt-4">
+              <Card.Header>
+                <h6 className="mb-0">
+                  Pending Criminal Records ({pendingCriminals.length})
+                  <Badge bg="primary" className="ms-2">
+                    Ready to Submit
+                  </Badge>
+                </h6>
+              </Card.Header>
+              <Card.Body>
+                <ListGroup variant="flush">
+                  {pendingCriminals.map((criminal, index) => (
+                    <ListGroup.Item key={criminal.id} className="d-flex justify-content-between align-items-start">
+                      <div className="flex-grow-1">
+                        <div className="d-flex align-items-center mb-2">
+                          {criminal.photoPreview && (
+                            <Image 
+                              src={criminal.photoPreview} 
+                              alt={criminal.criminal_name}
+                              fluid 
+                              style={{ width: '40px', height: '40px', objectFit: 'cover' }}
+                              className="rounded me-3"
+                            />
+                          )}
+                          <div>
+                            <strong>{criminal.criminal_name}</strong>
+                            {criminal.suspect && (
+                              <Badge bg="success" className="ms-2" title="Existing criminal">
+                                EXISTING
+                              </Badge>
+                            )}
+                            {!criminal.suspect && (
+                              <Badge bg="info" className="ms-2" title="New criminal">
+                                NEW
+                              </Badge>
+                            )}
+                            <div className="text-muted small">
+                              {criminal.aadhaar_number && `Aadhaar: ${criminal.aadhaar_number} • `}
+                              {criminal.criminal_age && `Age: ${criminal.criminal_age} • `}
+                              {criminal.criminal_gender && `Gender: ${criminal.criminal_gender}`}
+                            </div>
+                            <div className="small mt-1">
+                              <strong>Offenses:</strong> {criminal.offenses.length > 100 
+                                ? `${criminal.offenses.substring(0, 100)}...` 
+                                : criminal.offenses}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="d-flex flex-column gap-1">
+                        <Button 
+                          size="sm" 
+                          variant="outline-warning"
+                          onClick={() => editPendingCriminal(index)}
+                        >
+                          Edit
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline-danger"
+                          onClick={() => removePendingCriminal(index)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+                <div className="d-flex justify-content-between mt-3">
+                  <Button 
+                    variant="outline-danger"
+                    onClick={() => setPendingCriminals([])}
+                    disabled={pendingCriminals.length === 0}
+                  >
+                    Clear All
+                  </Button>
+                  <Button 
+                    variant="success"
+                    onClick={submitAllCriminals}
+                    disabled={pendingCriminals.length === 0 || submitting}
+                  >
+                    {submitting ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Submitting {pendingCriminals.length} Record(s)...
+                      </>
+                    ) : (
+                      `Submit ${pendingCriminals.length} Criminal Record(s)`
+                    )}
+                  </Button>
+                </div>
+              </Card.Body>
+            </Card>
           )}
 
           {/* Single Record Edit Mode */}
@@ -918,6 +985,8 @@ export default function CriminalRecordForm({ caseId }) {
                 <tbody>
                   {records.map(record => {
                     const suspectInfo = getSuspectDisplayInfo(record);
+                    const hasLinked = hasLinkedCriminal(record);
+                    
                     return (
                       <tr key={record.record_id || record.id}>
                         <td>
@@ -935,9 +1004,14 @@ export default function CriminalRecordForm({ caseId }) {
                         </td>
                         <td>
                           <strong>{suspectInfo.criminal_name}</strong>
-                          {record.suspect && (
-                            <Badge bg="success" className="ms-1" title="Linked from database">
+                          {hasLinked && (
+                            <Badge bg="success" className="ms-1" title="Linked from criminal database">
                               DB
+                            </Badge>
+                          )}
+                          {!hasLinked && (
+                            <Badge bg="warning" className="ms-1" title="Legacy record">
+                              LEGACY
                             </Badge>
                           )}
                         </td>
@@ -949,9 +1023,9 @@ export default function CriminalRecordForm({ caseId }) {
                         </td>
                         <td>
                           <small title={record.offenses}>
-                            {record.offenses.length > 50 
+                            {record.offenses && record.offenses.length > 50 
                               ? `${record.offenses.substring(0, 50)}...` 
-                              : record.offenses}
+                              : record.offenses || 'No offenses description'}
                           </small>
                         </td>
                         <td>

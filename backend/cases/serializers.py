@@ -38,36 +38,98 @@ class CriminalSerializer(serializers.ModelSerializer):
         read_only_fields = ['criminal_id', 'created_at']
 
 
-# --- Enhanced Criminal Record Serializer ---
+# -------------------------------
+# Criminal Record Serializer (FIXED)
+# -------------------------------
 class CriminalRecordSerializer(serializers.ModelSerializer):
-    suspect = CriminalSerializer(read_only=True)
-    aadhaar_number = serializers.CharField(write_only=True)
+    # Make suspect writable with PrimaryKeyRelatedField
+    suspect = serializers.PrimaryKeyRelatedField(
+        queryset=Criminal.objects.all(),
+        required=True  # This field is required
+    )
+    
+    # Optional: Include criminal details for read operations
+    suspect_details = CriminalSerializer(source='suspect', read_only=True)
 
     class Meta:
         model = CriminalRecord
         fields = [
-            'record_id', 'case', 'suspect', 'aadhaar_number',
-            'offenses', 'created_at'
+            'record_id', 'case', 'suspect', 'offenses', 'suspect_details', 'created_at'
         ]
-        read_only_fields = ['record_id', 'created_at', 'suspect']
+        read_only_fields = ['record_id', 'created_at', 'suspect_details']
+
+    def validate(self, data):
+        """
+        Ensure we have either suspect ID or criminal creation data
+        """
+        if not data.get('suspect'):
+            raise serializers.ValidationError({
+                "suspect": "Suspect (criminal ID) is required."
+            })
+        
+        return data
 
     def create(self, validated_data):
-        aadhaar = validated_data.pop('aadhaar_number', None)
+        """
+        Create criminal record - suspect must be provided as Criminal ID
+        """
+        return CriminalRecord.objects.create(**validated_data)
 
-        suspect, created = Criminal.objects.get_or_create(
-            aadhaar_number=aadhaar,
-            defaults={
-                'person_name': self.initial_data.get('person_name'),
-                'age': self.initial_data.get('age'),
-                'gender': self.initial_data.get('gender'),
-                'district': self.initial_data.get('district'),
-                'photo': self.initial_data.get('photo')
-            }
-        )
+    def update(self, instance, validated_data):
+        """
+        Update criminal record
+        """
+        instance.offenses = validated_data.get('offenses', instance.offenses)
+        
+        # Only update suspect if provided
+        if 'suspect' in validated_data:
+            instance.suspect = validated_data['suspect']
+        
+        instance.save()
+        return instance
 
-        validated_data['suspect'] = suspect
-        record = CriminalRecord.objects.create(**validated_data)
-        return record
+# -------------------------------
+# Criminal Record Create Serializer (Alternative for inline creation)
+# -------------------------------
+class CriminalRecordCreateSerializer(serializers.ModelSerializer):
+    """
+    Alternative serializer that allows creating criminal + record in one request
+    """
+    # Criminal creation fields
+    criminal_name = serializers.CharField(write_only=True, required=True)
+    criminal_age = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    criminal_gender = serializers.CharField(write_only=True, required=False, allow_null=True)
+    criminal_district = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    aadhaar_number = serializers.CharField(write_only=True, required=False, allow_null=True)
+    photo = serializers.ImageField(write_only=True, required=False, allow_null=True)
+
+    class Meta:
+        model = CriminalRecord
+        fields = [
+            'record_id', 'case', 'offenses', 'created_at',
+            'criminal_name', 'criminal_age', 'criminal_gender',
+            'criminal_district', 'aadhaar_number', 'photo'
+        ]
+        read_only_fields = ['record_id', 'created_at']
+
+    def create(self, validated_data):
+        # Extract criminal data
+        criminal_data = {
+            'criminal_name': validated_data.pop('criminal_name'),
+            'criminal_age': validated_data.pop('criminal_age', None),
+            'criminal_gender': validated_data.pop('criminal_gender', None),
+            'criminal_district': validated_data.pop('criminal_district', None),
+            'aadhaar_number': validated_data.pop('aadhaar_number', None),
+            'photo': validated_data.pop('photo', None),
+        }
+
+        # Create criminal first
+        criminal = Criminal.objects.create(**criminal_data)
+        
+        # Create criminal record
+        validated_data['suspect'] = criminal
+        return CriminalRecord.objects.create(**validated_data)
+
 
 # -------------------------------
 # Suspect Prediction Serializer

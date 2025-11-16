@@ -69,6 +69,32 @@ class AdminCaseViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Case.objects.all().order_by('-created_at')
     serializer_class = CaseSerializer
     permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
+    @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated, AdminOnlyPermission])
+    def assign_investigator(self, request, pk=None):
+        case = self.get_object()
+        
+        investigator_id = request.data.get('investigator_id')
+        if investigator_id == "null" or investigator_id is None:
+            case.investigator = None
+            case.save()
+            return Response({"message": "Investigator cleared", "case": CaseSerializer(case).data})
+
+        if not investigator_id:
+            return Response({"error": "investigator_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            investigator = CustomUser.objects.get(id=investigator_id)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "Invalid investigator_id"}, status=status.HTTP_404_NOT_FOUND)
+
+        case.investigator = investigator
+        case.save()
+
+        return Response({
+            "message": "Investigator assigned successfully",
+            "case": CaseSerializer(case).data
+        }, status=status.HTTP_200_OK)
+
 
 
 class AdminEvidenceViewSet(viewsets.ReadOnlyModelViewSet):

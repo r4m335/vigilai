@@ -66,19 +66,19 @@ class CriminalRecordAdmin(admin.ModelAdmin):
 
     # ✅ helper methods to access related Criminal fields
     def get_criminal_name(self, obj):
-        return obj.criminal.criminal_name
+        return obj.suspect.criminal_name
     get_criminal_name.short_description = "Name"
 
     def get_criminal_age(self, obj):
-        return obj.criminal.criminal_age
+        return obj.suspect.criminal_age
     get_criminal_age.short_description = "Age"
 
     def get_criminal_gender(self, obj):
-        return obj.criminal.criminal_gender
+        return obj.suspect.criminal_gender
     get_criminal_gender.short_description = "Gender"
 
     def get_criminal_district(self, obj):
-        return obj.criminal.criminal_district
+        return obj.suspect.criminal_district
     get_criminal_district.short_description = "District"
 
     def has_add_permission(self, request):

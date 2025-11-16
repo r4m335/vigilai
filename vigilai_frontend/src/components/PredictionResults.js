@@ -4,7 +4,7 @@ import {
   ProgressBar, Alert, Spinner, Badge, Modal, Form,
   Dropdown, InputGroup
 } from 'react-bootstrap';
-import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { useNavigate, useLocation, useParams,Link } from 'react-router-dom';
 import { getToken } from '../pages/cases/services/Authservice';
 
 function PredictionResults() {
@@ -464,13 +464,9 @@ function PredictionResults() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI - Suspect Prediction</Navbar.Brand>
           <div className="ms-auto">
-            <Button 
-              variant="outline-secondary" 
-              onClick={() => navigate('/dashboard')} 
-              className="me-2"
-            >
+            <Link to="/dashboard" className="btn btn-primary btn-sm me-2">
               Dashboard
-            </Button>
+            </Link>
           </div>
         </Container>
       </Navbar>

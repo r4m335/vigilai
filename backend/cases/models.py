@@ -17,6 +17,20 @@ class Case(models.Model):
     district = models.PositiveSmallIntegerField()  # 1–14 (can enforce in serializer)
     ward = models.PositiveSmallIntegerField()
 
+    LOCAL_GOVERNANCE_CHOICES = [
+        ('Panchayat', 'Panchayat'),
+        ('Municipal Corporation', 'Municipal Corporation'),
+    ]
+    local_governance = models.CharField(
+        max_length=30,
+        choices=LOCAL_GOVERNANCE_CHOICES,
+        default='Panchayat')
+    
+    governance_name = models.CharField(
+    max_length=200,
+    blank=True,
+    help_text="Name of the Panchayat or Corporation")
+
     # Renamed field
     location_description = models.CharField(max_length=255, blank=True, default='')
 
@@ -51,16 +65,9 @@ class Case(models.Model):
 
 
 class Evidence(models.Model):
-    EVIDENCE_CHOICES = [
-        ('DNA', 'DNA'),
-        ('Fingerprint', 'Fingerprint'),
-        ('Weapon', 'Weapon'),
-        ('Document', 'Document'),
-        ('Other', 'Other'),
-    ]
     evidence_id = models.AutoField(primary_key=True)
     case = models.ForeignKey(Case, related_name='evidences', on_delete=models.CASCADE)
-    type_of_evidence = models.CharField(max_length=100, choices=EVIDENCE_CHOICES, default='Other')
+    type_of_evidence = models.CharField(max_length=100, default='Other')
     details = models.TextField()
     file = models.FileField(upload_to='evidences/', blank=True, null=True)
 
@@ -75,6 +82,7 @@ class Witness(models.Model):
     case = models.ForeignKey(Case, related_name='witnesses', on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     statement = models.TextField()
+    aadhaar_number = models.CharField(max_length=12, unique=True)
     contact_info = models.CharField(
         max_length=100,
         blank=True,

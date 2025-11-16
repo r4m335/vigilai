@@ -15,6 +15,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import Profile from './pages/Profile';
 import NotFound from './components/NotFound'; 
 import PredictionResults from './components/PredictionResults';
+import CriminalSearchPage from './pages/cases/CriminalSearchPage';
 
 function App() {
   const [appLoading, setAppLoading] = useState(true);
@@ -63,6 +64,9 @@ function App() {
             <Dashboard />
           </PrivateRoute>
         } />
+
+        // In your App.js routes
+        <Route path="/criminal-search" element={<CriminalSearchPage />} />
         
         <Route path="/cases/new" element={
           <PrivateRoute>
