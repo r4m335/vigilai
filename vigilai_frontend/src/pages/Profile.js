@@ -239,9 +239,9 @@ function Profile() {
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
           <div className="ms-auto">
             <Button 
-              variant="outline-secondary" 
+     
               size="sm" 
-              className="me-2" 
+              className="btn btn-primary btn-sm me-2" 
               onClick={handleDashboardClick}
             >
               {userIsAdmin ? 'Admin Dashboard' : 'Dashboard'}

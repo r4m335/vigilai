@@ -16,6 +16,8 @@ import Profile from './pages/Profile';
 import NotFound from './components/NotFound'; 
 import PredictionResults from './components/PredictionResults';
 import CriminalSearchPage from './pages/cases/CriminalSearchPage';
+import Chat from './pages/Chat';
+import Notifications from './pages/Notifications';
 
 function App() {
   const [appLoading, setAppLoading] = useState(true);
@@ -65,8 +67,11 @@ function App() {
           </PrivateRoute>
         } />
 
-        // In your App.js routes
+       
         <Route path="/criminal-search" element={<CriminalSearchPage />} />
+
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/notifications" element={<Notifications />} />
         
         <Route path="/cases/new" element={
           <PrivateRoute>

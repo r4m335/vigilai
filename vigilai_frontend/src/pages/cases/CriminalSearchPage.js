@@ -17,6 +17,7 @@ import {
 } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { getToken, logout } from './services/Authservice';
+import NotificationService from './services/NotificationService';
 
 export default function CriminalSearchPage() {
   const navigate = useNavigate();
@@ -27,6 +28,8 @@ export default function CriminalSearchPage() {
   const [selectedCriminal, setSelectedCriminal] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasNewNotifications, setHasNewNotifications] = useState(false);
 
   useEffect(() => {
     // Try to get profile photo from localStorage
@@ -38,7 +41,46 @@ export default function CriminalSearchPage() {
     } catch (err) {
       console.error('Error getting profile photo:', err);
     }
+
+    loadUnreadCount();
+
+    const notificationInterval = setInterval(() => {
+      loadUnreadCount();
+    }, 30000); // Check every 30 seconds
+
+    return () => {
+      clearInterval(notificationInterval);
+    };
   }, []);
+
+  // NEW: Load unread notification count
+  const loadUnreadCount = async () => {
+    try {
+      const previousCount = unreadCount;
+      const countData = await NotificationService.getUnreadCount();
+      const newCount = countData.unread_count || 0;
+      
+      setUnreadCount(newCount);
+      
+      // Show red circle if new notifications arrived
+      if (newCount > previousCount) {
+        setHasNewNotifications(true);
+        
+        // Auto-hide the red circle after 10 seconds
+        setTimeout(() => {
+          setHasNewNotifications(false);
+        }, 10000);
+      }
+    } catch (err) {
+      console.error('Error loading unread count:', err);
+    }
+  };
+
+  // NEW: Reset new notification indicator when user clicks notifications
+  const handleNotificationsClick = () => {
+    setHasNewNotifications(false);
+    navigate('/notifications');
+  };
 
   // Basic search by name or Aadhaar
   const searchCriminals = async () => {
@@ -140,7 +182,54 @@ export default function CriminalSearchPage() {
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI - Criminal Search</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
-            
+            <Link to="/dashboard" className="btn btn-primary btn-sm me-2">
+              Dashboard
+            </Link>
+            {/* Notification Icon */}
+            <button 
+              onClick={handleNotificationsClick}
+              className="btn btn-outline-secondary btn-sm me-2 position-relative"
+              title="Notifications"
+              style={{ border: 'none', background: 'transparent' }}
+            >
+              <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
+              
+              {/* Red circle with exclamation mark for new notifications */}
+              {hasNewNotifications && (
+                <div 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    backgroundColor: '#dc3545',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid white',
+                    animation: 'pulse 2s infinite'
+                  }}
+                >
+                  <i 
+                    className="bi bi-exclamation text-white" 
+                    style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                  ></i>
+                </div>
+              )}
+              
+              {/* Regular unread count badge */}
+              {unreadCount > 0 && !hasNewNotifications && (
+                <Badge 
+                  bg="danger" 
+                  pill 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{ fontSize: '0.6rem' }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </button>
+
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -160,9 +249,7 @@ export default function CriminalSearchPage() {
                 </div>
               )}
             </Link>
-            <Link to="/dashboard" className="btn btn-primary btn-sm me-2">
-              Dashboard
-            </Link>
+            
             <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
               Logout
             </button>

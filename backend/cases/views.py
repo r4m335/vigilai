@@ -368,7 +368,17 @@ class CriminalStatsView(APIView):
 class CaseViewSet(viewsets.ModelViewSet):
     serializer_class = CaseSerializer
     queryset = Case.objects.all()
-    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in ('GET',):
+            return True
+        
+        return (
+            request.user.is_superuser or
+            obj.owner == request.user or
+            obj.investigator == request.user
+        )
 
     def get_queryset(self):
         queryset = Case.objects.all()

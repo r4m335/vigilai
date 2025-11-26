@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Table, Spinner, Alert, Card, Row, Col, Navbar, Button, Badge, Accordion, Image, Form, InputGroup } from 'react-bootstrap';
+import { 
+  Container, Table, Spinner, Alert, Card, Row, Col, Navbar, 
+  Button, Badge, Image, Form, InputGroup, Modal 
+} from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   fetchCases, 
@@ -8,20 +11,26 @@ import {
   fetchWitnesses, 
   fetchCriminalRecords 
 } from './CaseService';
-import { logout, getToken, isAdmin } from './services/Authservice';
+import { logout, getToken, isAdmin, getCurrentUser } from './services/Authservice';
+import NotificationService from './services/NotificationService';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
   const [filteredCases, setFilteredCases] = useState([]);
+  const [sortedCases, setSortedCases] = useState([]); // NEW: For sorted cases
   const [caseDetails, setCaseDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [expandedCase, setExpandedCase] = useState(null);
+  const [selectedCase, setSelectedCase] = useState(null);
+  const [showCaseModal, setShowCaseModal] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState(null);
-  const [predicting, setPredicting] = useState({}); // Track predicting state per case
+  const [predicting, setPredicting] = useState({});
   const [userIsAdmin, setUserIsAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     crimeType: '',
@@ -29,26 +38,31 @@ export default function Dashboard() {
     dateFrom: '',
     dateTo: ''
   });
+  
+  // NEW: Store users for investigator name lookup
+  const [users, setUsers] = useState([]);
+  
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user is authenticated
     const token = getToken();
     if (!token) {
       navigate('/login');
       return;
     }
 
-    // Check user role
     setUserIsAdmin(isAdmin());
-
-    // Fetch cases data
+    setCurrentUser(getCurrentUser());
     loadCases();
-    
-    // Load profile photo
     loadProfilePhoto();
+    loadUnreadCount();
+    loadUsers(); // NEW: Load users for investigator name lookup
+
+    const notificationInterval = setInterval(() => {
+      loadUnreadCount();
+    }, 30000); // Check every 30 seconds
+
     
-    // Set up storage event listener to detect profile photo updates
     const handleStorageChange = (e) => {
       if (e.key === 'profile_photo') {
         setProfilePhoto(e.newValue);
@@ -57,17 +71,64 @@ export default function Dashboard() {
     
     window.addEventListener('storage', handleStorageChange);
     
-    // Clean up event listener
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [navigate]);
 
+  // NEW: Load users for investigator name lookup
+  const loadUsers = async () => {
+    try {
+      const token = getToken();
+      const response = await fetch('/api/users/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const usersData = await response.json();
+        const usersArray = usersData.results || usersData || [];
+        setUsers(usersArray);
+        console.log('✅ Users loaded for investigator lookup:', usersArray.length);
+      }
+    } catch (err) {
+      console.error('Error loading users for investigator lookup:', err);
+    }
+  };
+
+  // NEW: Load unread notification count
+  const loadUnreadCount = async () => {
+    try {
+      const previousCount = unreadCount;
+      const countData = await NotificationService.getUnreadCount();
+      const newCount = countData.unread_count || 0;
+      
+      setUnreadCount(newCount);
+      
+      // Show red circle if new notifications arrived
+      if (newCount > previousCount) {
+        setHasNewNotifications(true);
+        
+        // Auto-hide the red circle after 10 seconds
+        setTimeout(() => {
+          setHasNewNotifications(false);
+        }, 10000);
+      }
+    } catch (err) {
+      console.error('Error loading unread count:', err);
+    }
+  };
+
+  // NEW: Reset new notification indicator when user clicks notifications
+  const handleNotificationsClick = () => {
+    setHasNewNotifications(false);
+    navigate('/notifications');
+  };
+
   useEffect(() => {
-    // Filter cases based on search term and filters
     let filtered = cases;
 
-    // Apply search term filter
     if (searchTerm.trim() !== '') {
       filtered = filtered.filter(caseItem => 
         caseItem.case_number?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -75,26 +136,22 @@ export default function Dashboard() {
       );
     }
 
-    // Apply status filter
     if (filters.status) {
       filtered = filtered.filter(caseItem => caseItem.status === filters.status);
     }
 
-    // Apply crime type filter
     if (filters.crimeType) {
       filtered = filtered.filter(caseItem => 
         caseItem.primary_type?.toLowerCase().includes(filters.crimeType.toLowerCase())
       );
     }
 
-    // Apply district filter
     if (filters.district) {
       filtered = filtered.filter(caseItem => 
         caseItem.district?.toString() === filters.district
       );
     }
 
-    // Apply date range filter
     if (filters.dateFrom) {
       const fromDate = new Date(filters.dateFrom);
       filtered = filtered.filter(caseItem => {
@@ -105,7 +162,7 @@ export default function Dashboard() {
 
     if (filters.dateTo) {
       const toDate = new Date(filters.dateTo);
-      toDate.setHours(23, 59, 59, 999); // End of the day
+      toDate.setHours(23, 59, 59, 999);
       filtered = filtered.filter(caseItem => {
         const caseDate = new Date(caseItem.date_time || caseItem.date || caseItem.created_at);
         return caseDate <= toDate;
@@ -115,13 +172,36 @@ export default function Dashboard() {
     setFilteredCases(filtered);
   }, [searchTerm, filters, cases]);
 
+  // NEW: Sort cases - investigator's cases first, then by date (newest first)
+  useEffect(() => {
+    if (filteredCases.length > 0 && currentUser) {
+      const sorted = [...filteredCases].sort((a, b) => {
+        // Check if current user is investigator for each case
+        const isAInvestigator = isCaseInvestigator(a);
+        const isBInvestigator = isCaseInvestigator(b);
+        
+        // If both are investigator cases or both are not, sort by date
+        if (isAInvestigator === isBInvestigator) {
+          const dateA = new Date(a.date_time || a.date || a.created_at);
+          const dateB = new Date(b.date_time || b.date || b.created_at);
+          return dateB - dateA; // Newest first
+        }
+        
+        // Investigator cases come first
+        return isAInvestigator ? -1 : 1;
+      });
+      
+      setSortedCases(sorted);
+    } else {
+      setSortedCases(filteredCases);
+    }
+  }, [filteredCases, currentUser]);
+
   const loadProfilePhoto = () => {
-    // Try to get profile photo from localStorage
     const storedProfilePhoto = localStorage.getItem('profile_photo');
     if (storedProfilePhoto) {
       setProfilePhoto(storedProfilePhoto);
     } else {
-      // If not in localStorage, try to fetch from API
       fetchProfilePhoto();
     }
   };
@@ -139,7 +219,6 @@ export default function Dashboard() {
       if (response.ok) {
         const profileData = await response.json();
         if (profileData.profile_photo) {
-          // Make sure we have the full URL for the profile photo
           const photoUrl = profileData.profile_photo.startsWith('http') 
             ? profileData.profile_photo 
             : `${window.location.origin}${profileData.profile_photo}`;
@@ -153,28 +232,207 @@ export default function Dashboard() {
     }
   };
 
+  // UPDATED: Check if current user is the assigned investigator of a case
+  const isCaseInvestigator = (caseItem) => {
+    if (!currentUser) return false;
+    
+    // Check if user is admin (admins can edit/delete any case)
+    if (userIsAdmin) return true;
+    
+    // Check if user is the assigned investigator of the case
+    if (caseItem.investigator) {
+      // If investigator is an object with id
+      if (typeof caseItem.investigator === 'object' && caseItem.investigator.id === currentUser.id) {
+        return true;
+      }
+      // If investigator is a direct ID
+      if (caseItem.investigator_id === currentUser.id) {
+        return true;
+      }
+      // If investigator is stored as user ID directly
+      if (caseItem.investigator === currentUser.id) {
+        return true;
+      }
+    }
+    
+    // Check alternative field names
+    if (caseItem.assigned_investigator) {
+      if (typeof caseItem.assigned_investigator === 'object' && caseItem.assigned_investigator.id === currentUser.id) {
+        return true;
+      }
+      if (caseItem.assigned_investigator === currentUser.id) {
+        return true;
+      }
+    }
+    
+    // Check by username/email as fallback
+    if (caseItem.investigator && typeof caseItem.investigator === 'object') {
+      return caseItem.investigator.username === currentUser.username || 
+             caseItem.investigator.email === currentUser.email;
+    }
+    
+    return false;
+  };
+
+  // UPDATED: Get display name for investigator - IMPROVED VERSION
+  const getInvestigatorDisplayName = (caseItem) => {
+    console.log('🔍 Getting investigator display name for case:', caseItem);
+    
+    // Check primary investigator field
+    if (caseItem.investigator) {
+      console.log('📋 Investigator field found:', caseItem.investigator);
+      
+      if (typeof caseItem.investigator === 'object') {
+        const name = `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim();
+        const result = name || caseItem.investigator.username || 'Unknown Investigator';
+        console.log('✅ Investigator name from object:', result);
+        return result;
+      }
+      
+      // If investigator is a string/number (ID), look up in users array
+      if (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number') {
+        const investigatorId = caseItem.investigator;
+        console.log('🔍 Looking up investigator ID in users:', investigatorId);
+        
+        const foundUser = users.find(user => 
+          user.id === investigatorId || 
+          user.id === parseInt(investigatorId) ||
+          user.id === caseItem.investigator_id
+        );
+        
+        if (foundUser) {
+          const name = `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim();
+          const result = name || foundUser.username || `Investigator ${investigatorId}`;
+          console.log('✅ Investigator found in users:', result);
+          return result;
+        }
+        
+        console.log('❌ Investigator not found in users, returning ID');
+        return `Investigator ${investigatorId}`;
+      }
+      
+      return caseItem.investigator;
+    }
+    
+    // Check alternative field names
+    if (caseItem.assigned_investigator) {
+      console.log('📋 Assigned investigator field found:', caseItem.assigned_investigator);
+      
+      if (typeof caseItem.assigned_investigator === 'object') {
+        const name = `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim();
+        const result = name || caseItem.assigned_investigator.username || 'Unknown Investigator';
+        console.log('✅ Assigned investigator name from object:', result);
+        return result;
+      }
+      
+      // If assigned_investigator is an ID, look up in users array
+      if (typeof caseItem.assigned_investigator === 'string' || typeof caseItem.assigned_investigator === 'number') {
+        const investigatorId = caseItem.assigned_investigator;
+        console.log('🔍 Looking up assigned investigator ID in users:', investigatorId);
+        
+        const foundUser = users.find(user => 
+          user.id === investigatorId || 
+          user.id === parseInt(investigatorId)
+        );
+        
+        if (foundUser) {
+          const name = `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim();
+          const result = name || foundUser.username || `Investigator ${investigatorId}`;
+          console.log('✅ Assigned investigator found in users:', result);
+          return result;
+        }
+        
+        console.log('❌ Assigned investigator not found in users, returning ID');
+        return `Investigator ${investigatorId}`;
+      }
+      
+      return caseItem.assigned_investigator;
+    }
+    
+    // Check if user is owner (for backward compatibility)
+    if (caseItem.owner) {
+      if (typeof caseItem.owner === 'object') {
+        return caseItem.owner.username || 'Case Owner';
+      }
+      return caseItem.owner;
+    }
+    
+    console.log('❌ No investigator information found');
+    return 'Not assigned';
+  };
+
+  // NEW: Get investigator details for modal display
+  const getInvestigatorDetails = (caseItem) => {
+    // Check primary investigator field
+    if (caseItem.investigator && typeof caseItem.investigator === 'object') {
+      return {
+        name: `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim(),
+        rank: caseItem.investigator.rank || 'N/A',
+        staffId: caseItem.investigator.staff_id || 'N/A',
+        id: caseItem.investigator.id
+      };
+    }
+    
+    // Check alternative field names
+    if (caseItem.assigned_investigator && typeof caseItem.assigned_investigator === 'object') {
+      return {
+        name: `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim(),
+        rank: caseItem.assigned_investigator.rank || 'N/A',
+        staffId: caseItem.assigned_investigator.staff_id || 'N/A',
+        id: caseItem.assigned_investigator.id
+      };
+    }
+    
+    // If investigator is just an ID, try to find the user details
+    if (caseItem.investigator && (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number')) {
+      const investigatorUser = users.find(user => 
+        user.id === caseItem.investigator || 
+        user.id === parseInt(caseItem.investigator) ||
+        user.id === caseItem.investigator_id
+      );
+      if (investigatorUser) {
+        return {
+          name: `${investigatorUser.first_name || ''} ${investigatorUser.last_name || ''}`.trim(),
+          rank: investigatorUser.rank || 'N/A',
+          staffId: investigatorUser.staff_id || 'N/A',
+          id: investigatorUser.id
+        };
+      }
+      return {
+        name: `Investigator ID: ${caseItem.investigator}`,
+        rank: 'Unknown',
+        staffId: 'Unknown',
+        id: caseItem.investigator
+      };
+    }
+    
+    return null;
+  };
+
+  // NEW: Check if current user is the investigator (for display purposes)
+  const isCurrentUserInvestigator = (caseItem) => {
+    return isCaseInvestigator(caseItem);
+  };
+
   const loadCases = () => {
     setLoading(true);
     fetchCases()
       .then(response => {
-        // Handle different response formats
         const casesData = Array.isArray(response.data) ? response.data : 
                          (response.data.results || response.data.cases || []);
         
-        // ✅ FIX: Map case_id to id for compatibility
         const formattedCases = casesData.map(caseItem => ({
           ...caseItem,
-          id: caseItem.case_id || caseItem.id // Use case_id as id for compatibility
+          id: caseItem.case_id || caseItem.id
         }));
         
         setCases(formattedCases);
-        setFilteredCases(formattedCases); // Initialize filtered cases
+        setFilteredCases(formattedCases);
         setLoading(false);
       })
       .catch(err => { 
         console.error('Error loading cases:', err);
         if (err.response && err.response.status === 401) {
-          // Token is invalid, redirect to login
           logout();
           navigate('/login');
         } else {
@@ -209,11 +467,9 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: Extract criminal details from record with multiple data structure support
   const getCriminalDisplayInfo = (record) => {
-    console.log('🔍 Processing criminal record:', record); // Debug log
+    console.log('🔍 Processing criminal record:', record);
     
-    // Case 1: Record has suspect_details (from new serializer)
     if (record.suspect_details) {
       return {
         criminal_name: record.suspect_details.criminal_name || 'Unknown',
@@ -225,7 +481,6 @@ export default function Dashboard() {
       };
     }
     
-    // Case 2: Record has suspect object (from old serializer or nested data)
     if (record.suspect && typeof record.suspect === 'object') {
       return {
         criminal_name: record.suspect.criminal_name || 'Unknown',
@@ -237,7 +492,6 @@ export default function Dashboard() {
       };
     }
     
-    // Case 3: Record has direct criminal fields (legacy data)
     if (record.criminal_name || record.person_name) {
       return {
         criminal_name: record.criminal_name || record.person_name,
@@ -249,7 +503,6 @@ export default function Dashboard() {
       };
     }
     
-    // Case 4: Fallback - no criminal data found
     return {
       criminal_name: 'Unknown Criminal',
       criminal_age: null,
@@ -258,6 +511,15 @@ export default function Dashboard() {
       photo: null,
       aadhaar_number: null
     };
+  };
+
+  const handleCaseClick = async (caseItem) => {
+    setSelectedCase(caseItem);
+    setShowCaseModal(true);
+    
+    if (!caseDetails[caseItem.id]) {
+      await loadCaseDetails(caseItem.id);
+    }
   };
 
   const handleSearch = (e) => {
@@ -302,25 +564,18 @@ export default function Dashboard() {
     try {
       const token = getToken();
       
-      // Parse date and time from case data
       const caseDateTime = caseItem.date_time || caseItem.date || new Date().toISOString();
       const dateObj = new Date(caseDateTime);
       
-      // Prepare prediction data that matches your backend's prepare_case_data function
       const predictionData = {
-        // These fields will be transformed by prepare_case_data
         "crime_type": caseItem.primary_type || caseItem.type_of_crime || "THEFT",
         "description": caseItem.description || "GENERAL THEFT",
         "location": caseItem.location_description || caseItem.location || "STREET",
         "district": parseInt(caseItem.district) || 5,
         "ward": parseInt(caseItem.ward) || 10,
-        "same_district": 1, // Default to 1
-        "suspect_age": 30, // Default age
-        
-        // These fields are used by prepare_case_data for datetime parsing
+        "same_district": 1,
+        "suspect_age": 30,
         "datetime": caseDateTime,
-        
-        // Additional context fields
         "suspect_name": "Unknown",
         "previous_offenses": "No prior offenses"
       };
@@ -344,7 +599,6 @@ export default function Dashboard() {
       const predictionResult = await response.json();
       console.log('Prediction result:', predictionResult);
       
-      // Navigate to prediction results page with the data
       navigate('/prediction-results', { 
         state: { 
           prediction: predictionResult,
@@ -355,8 +609,6 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Prediction error:', err);
       setError(`Failed to generate prediction: ${err.message}`);
-      
-      // Auto-clear error after 5 seconds
       setTimeout(() => setError(null), 5000);
     } finally {
       setPredicting(prev => ({ ...prev, [caseItem.id]: false }));
@@ -367,9 +619,7 @@ export default function Dashboard() {
     if (window.confirm('Are you sure you want to delete this case?')) {
       deleteCase(id)
         .then(() => {
-          // Remove the case from the local state
           setCases(cases.filter(c => c.id !== id));
-          // Remove from caseDetails if exists
           const newCaseDetails = { ...caseDetails };
           delete newCaseDetails[id];
           setCaseDetails(newCaseDetails);
@@ -378,22 +628,6 @@ export default function Dashboard() {
           console.error('Error deleting case:', err);
           setError('Failed to delete case.');
         });
-    }
-  };
-
-  const handleCaseClick = (caseId, e) => {
-    // Prevent click event if the click was on action buttons
-    if (e.target.closest('button') || e.target.closest('a')) {
-      return;
-    }
-    
-    if (expandedCase === caseId) {
-      setExpandedCase(null);
-    } else {
-      setExpandedCase(caseId);
-      if (!caseDetails[caseId]) {
-        loadCaseDetails(caseId);
-      }
     }
   };
 
@@ -423,7 +657,6 @@ export default function Dashboard() {
   const formatContactInfo = (contactInfo) => {
     if (!contactInfo) return 'N/A';
     
-    // Check if it's an email
     if (contactInfo.includes('@')) {
       return (
         <div>
@@ -437,7 +670,6 @@ export default function Dashboard() {
       );
     }
     
-    // Format phone number for display
     const cleaned = contactInfo.replace(/\D/g, '');
     if (cleaned.length === 10) {
       const formattedPhone = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
@@ -463,6 +695,49 @@ export default function Dashboard() {
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
             <div className="ms-auto d-flex align-items-center">
+              <button 
+              onClick={handleNotificationsClick}
+              className="btn btn-outline-secondary btn-sm me-2 position-relative"
+              title="Notifications"
+              style={{ border: 'none', background: 'transparent' }}
+            >
+              <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
+              
+              {/* Red circle with exclamation mark for new notifications */}
+              {hasNewNotifications && (
+                <div 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    backgroundColor: '#dc3545',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid white',
+                    animation: 'pulse 2s infinite'
+                  }}
+                >
+                  <i 
+                    className="bi bi-exclamation text-white" 
+                    style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                  ></i>
+                </div>
+              )}
+              
+              {/* Regular unread count badge */}
+              {unreadCount > 0 && !hasNewNotifications && (
+                <Badge 
+                  bg="danger" 
+                  pill 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{ fontSize: '0.6rem' }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </button>
               <Link to="/profile" className="text-decoration-none me-3">
                 {profilePhoto ? (
                   <Image
@@ -515,6 +790,29 @@ export default function Dashboard() {
               </Button>
             )}
             
+            <Link to="/criminal-search" className="btn btn-primary btn-sm me-2">
+              <i className="bi bi-search me-1"></i>Criminal Search
+            </Link>
+            <Link to="/cases/new" className="btn btn-primary btn-sm me-2">
+              <i className="bi bi-plus-circle me-1"></i>Create New Case
+            </Link>
+            <Link 
+              to="/notifications" 
+              className="btn btn-outline-secondary btn-sm me-2 position-relative"
+              title="Notifications"
+            >
+              <i className="bi bi-bell"></i>
+              {unreadCount > 0 && (
+                <Badge 
+                  bg="danger" 
+                  pill 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{ fontSize: '0.6rem' }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </Link>
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -533,13 +831,6 @@ export default function Dashboard() {
                   <i className="bi bi-person text-muted"></i>
                 </div>
               )}
-            </Link>
-            {/* 🔍 Criminal Search Button */}
-            <Link to="/criminal-search" className="btn btn-primary btn-sm me-2">
-              <i className="bi bi-search me-1"></i>Criminal Search
-            </Link>
-            <Link to="/cases/new" className="btn btn-primary btn-sm me-2">
-              <i className="bi bi-plus-circle me-1"></i>Create New Case
             </Link>
             <button 
               onClick={handleLogout} 
@@ -571,15 +862,17 @@ export default function Dashboard() {
                 {userIsAdmin && (
                   <Badge bg="warning" className="ms-2">Administrator</Badge>
                 )}
+                {currentUser && !userIsAdmin && (
+                  <Badge bg="info" className="ms-2">{currentUser.username}</Badge>
+                )}
               </div>
-              <span className="badge bg-primary">{filteredCases.length} {isFilterActive() ? 'filtered' : 'total'} cases</span>
+              <span className="badge bg-primary">{sortedCases.length} {isFilterActive() ? 'filtered' : 'total'} cases</span>
             </div>
             <p className="text-muted">Manage and track all your cases in one place</p>
 
             {/* Search and Filters */}
             <Card className="border-0 shadow-sm mb-4">
               <Card.Body>
-                {/* Search Bar */}
                 <Form.Group className="mb-3">
                   <InputGroup>
                     <InputGroup.Text>
@@ -602,13 +895,11 @@ export default function Dashboard() {
                     )}
                   </InputGroup>
                   <Form.Text className="text-muted">
-                    {isFilterActive() && `Found ${filteredCases.length} case(s) matching your criteria`}
+                    {isFilterActive() && `Found ${sortedCases.length} case(s) matching your criteria`}
                   </Form.Text>
                 </Form.Group>
 
-                {/* Filters Row */}
                 <Row className="g-3">
-                  {/* Status Filter */}
                   <Col md={6} lg={3}>
                     <Form.Group>
                       <Form.Label className="fw-semibold small">Status</Form.Label>
@@ -624,7 +915,6 @@ export default function Dashboard() {
                     </Form.Group>
                   </Col>
 
-                  {/* Crime Type Filter */}
                   <Col md={6} lg={3}>
                     <Form.Group>
                       <Form.Label className="fw-semibold small">Crime Type</Form.Label>
@@ -640,7 +930,6 @@ export default function Dashboard() {
                     </Form.Group>
                   </Col>
 
-                  {/* District Filter */}
                   <Col md={6} lg={2}>
                     <Form.Group>
                       <Form.Label className="fw-semibold small">District</Form.Label>
@@ -656,7 +945,6 @@ export default function Dashboard() {
                     </Form.Group>
                   </Col>
 
-                  {/* Date From Filter */}
                   <Col md={6} lg={2}>
                     <Form.Group>
                       <Form.Label className="fw-semibold small">From Date</Form.Label>
@@ -668,7 +956,6 @@ export default function Dashboard() {
                     </Form.Group>
                   </Col>
 
-                  {/* Date To Filter */}
                   <Col md={6} lg={2}>
                     <Form.Group>
                       <Form.Label className="fw-semibold small">To Date</Form.Label>
@@ -687,258 +974,132 @@ export default function Dashboard() {
 
         <Row className="justify-content-center">
           <Col lg={10}>
-            {filteredCases.length > 0 ? (
-              <Accordion activeKey={expandedCase}>
-                {filteredCases.map(c => (
-                  <Card 
-                    key={c.id} 
-                    className="border-0 shadow-sm auth-card mb-3"
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Card.Body 
-                      className="p-4"
-                      onClick={(e) => handleCaseClick(c.id, e)}
+            {sortedCases.length > 0 ? (
+              <div>
+                {sortedCases.map(c => {
+                  const userCanEdit = isCaseInvestigator(c);
+                  const isUserInvestigator = isCurrentUserInvestigator(c);
+                  const investigatorDetails = getInvestigatorDetails(c);
+                  
+                  return (
+                    <Card 
+                      key={c.id} 
+                      className={`border-0 shadow-sm auth-card mb-3 ${isUserInvestigator ? 'border-primary border-2' : ''}`}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleCaseClick(c)}
                     >
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div className="flex-grow-1">
-                          <h5 className="fw-bold">
-                            {c.case_number ? `#${c.case_number}` : `Case #${c.id}`} - {c.primary_type || c.title || 'Untitled Case'}
-                            {expandedCase === c.id ? (
-                              <i className="bi bi-chevron-up text-muted ms-2" title="Click to collapse"></i>
-                            ) : (
-                              <i className="bi bi-chevron-down text-muted ms-2" title="Click to expand"></i>
-                            )}
-                          </h5>
-                          <p className="text-muted mb-2">{c.description}</p>
-                          <div className="d-flex gap-2 mb-2 flex-wrap">
-                            {getStatusBadge(c.status)}
-                            <Badge bg="light" text="dark">
-                              {c.date_time ? new Date(c.date_time).toLocaleDateString() : 
-                               c.date ? new Date(c.date).toLocaleDateString() : 'No date'}
-                            </Badge>
-                            <Badge bg="light" text="dark">
-                              {c.location_description || c.location || 'No location'}
-                            </Badge>
-                            {c.district && (
-                              <Badge bg="light" text="dark">
-                                District {c.district}
+                      <Card.Body className="p-4">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="flex-grow-1">
+                            <h5 className="fw-bold">
+                              {c.case_number ? `#${c.case_number}` : `Case #${c.id}`} - {c.primary_type || c.title || 'Untitled Case'}
+                              {isUserInvestigator && (
+                                <Badge bg="primary" className="ms-2">
+                                  <i className="bi bi-star-fill me-1"></i>Your Case
+                                </Badge>
+                              )}
+                              <i className="bi bi-arrow-right-circle text-muted ms-2" title="Click to view details"></i>
+                            </h5>
+                            <p className="text-muted mb-2">{c.description}</p>
+                            
+                            {/* Investigator badge */}
+                            <div className="mb-2">
+                              <Badge 
+                                bg={isUserInvestigator ? "primary" : "outline-primary"} 
+                                text={isUserInvestigator ? "white" : "dark"} 
+                                className={isUserInvestigator ? "" : "border"}
+                              >
+                                <i className="bi bi-person-badge me-1"></i>
+                                Investigator: {getInvestigatorDisplayName(c)}
+                                {isUserInvestigator && <span className="ms-1">(You)</span>}
                               </Badge>
-                            )}
-                            {c.ward && (
+                              {investigatorDetails && investigatorDetails.rank && (
+                                <Badge bg="info" className="ms-1">
+                                  {investigatorDetails.rank}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="d-flex gap-2 mb-2 flex-wrap">
+                              {getStatusBadge(c.status)}
                               <Badge bg="light" text="dark">
-                                Ward {c.ward}
+                                {c.date_time ? new Date(c.date_time).toLocaleDateString() : 
+                                c.date ? new Date(c.date).toLocaleDateString() : 'No date'}
                               </Badge>
+                              <Badge bg="light" text="dark">
+                                {c.location_description || c.location || 'No location'}
+                              </Badge>
+                              {c.district && (
+                                <Badge bg="light" text="dark">
+                                  District {c.district}
+                                </Badge>
+                              )}
+                              {c.ward && (
+                                <Badge bg="light" text="dark">
+                                  Ward {c.ward}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div 
+                            className="d-flex gap-2 flex-wrap ms-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {/* ONLY SHOW EDIT/DELETE BUTTONS TO CASE INVESTIGATORS OR ADMINS */}
+                            {userCanEdit && (
+                              <>
+                                <Link 
+                                  to={`/cases/edit/${c.id}`} 
+                                  className="btn btn-sm btn-outline-primary"
+                                  title="Edit Case"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <i className="bi bi-pencil"></i>
+                                </Link>
+                                
+                                <Button 
+                                  variant="outline-danger" 
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(c.id);
+                                  }}
+                                  title="Delete Case"
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+
+                                <Button 
+                                  variant="success" 
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePredict(c);
+                                  }}
+                                  disabled={predicting[c.id]}
+                                >
+                                  {predicting[c.id] ? (
+                                    <>
+                                      <Spinner animation="border" size="sm" className="me-1" />
+                                      Predicting...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="bi bi-robot me-1"></i>
+                                      Predict Suspects
+                                    </>
+                                  )}
+                                </Button>
+                              </>
                             )}
+                            
                           </div>
                         </div>
-                        <div 
-                          className="d-flex gap-2 flex-wrap ms-3"
-                          onClick={(e) => e.stopPropagation()} // Prevent card click when clicking buttons
-                        >
-                          <Button 
-                            variant="success" 
-                            size="sm"
-                            onClick={() => handlePredict(c)}
-                            disabled={predicting[c.id]}
-                          >
-                            {predicting[c.id] ? (
-                              <>
-                                <Spinner animation="border" size="sm" className="me-1" />
-                                Predicting...
-                              </>
-                            ) : (
-                              <>
-                                <i className="bi bi-robot me-1"></i>
-                                Predict Suspects
-                              </>
-                            )}
-                          </Button>
-                          
-                          {/* ✏️ Edit Button with Pencil Icon */}
-                          <Link 
-                            to={`/cases/edit/${c.id}`} 
-                            className="btn btn-sm btn-outline-primary"
-                            title="Edit Case"
-                          >
-                            <i className="bi bi-pencil"></i>
-                          </Link>
-                          
-                          {/* 🗑️ Delete Button with Trash Icon */}
-                          <Button 
-                            variant="outline-danger" 
-                            size="sm"
-                            onClick={() => handleDelete(c.id)}
-                            title="Delete Case"
-                          >
-                            <i className="bi bi-trash"></i>
-                          </Button>
-                        </div>
-                      </div>
-
-                      <Accordion.Collapse eventKey={c.id}>
-                        <div className="mt-4">
-                          {/* Evidence Section */}
-                          <h6 className="fw-bold mb-3">Evidence</h6>
-                          {caseDetails[c.id]?.evidence?.length > 0 ? (
-                            <Table striped bordered responsive size="sm" className="mb-4">
-                              <thead>
-                                <tr>
-                                  <th>Type of Evidence</th>
-                                  <th>Details</th>
-                                  <th>File</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {caseDetails[c.id].evidence.map(evidence => (
-                                  <tr key={evidence.id}>
-                                    <td>{evidence.type_of_evidence}</td>
-                                    <td>{evidence.details}</td>
-                                    <td>
-                                      {evidence.file ? (
-                                        <a href={evidence.file} target="_blank" rel="noopener noreferrer">
-                                          View File
-                                        </a>
-                                      ) : (
-                                        'No file'
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </Table>
-                          ) : (
-                            <p className="text-muted mb-4">No evidence recorded.</p>
-                          )}
-
-                          {/* Witnesses Section - UPDATED with Aadhaar and Contact Info */}
-                          <h6 className="fw-bold mb-3">Witnesses</h6>
-                          {caseDetails[c.id]?.witnesses?.length > 0 ? (
-                            <Table striped bordered responsive size="sm" className="mb-4">
-                              <thead>
-                                <tr>
-                                  <th>Name</th>
-                                  <th>Aadhaar Number</th>
-                                  <th>Contact Information</th>
-                                  <th>Statement</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {caseDetails[c.id].witnesses.map(witness => (
-                                  <tr key={witness.id || witness.witness_id}>
-                                    <td>
-                                      <strong>{witness.name}</strong>
-                                    </td>
-                                    <td>
-                                      {witness.aadhaar_number ? (
-                                        <span className="font-monospace">{witness.aadhaar_number}</span>
-                                      ) : (
-                                        <span className="text-muted">Not provided</span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      {witness.contact_info ? (
-                                        formatContactInfo(witness.contact_info)
-                                      ) : (
-                                        <span className="text-muted">Not provided</span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      <div style={{ maxWidth: '200px' }}>
-                                        {witness.statement.length > 100 ? (
-                                          <>
-                                            {witness.statement.substring(0, 100)}...
-                                            <br />
-                                            <small>
-                                              <button 
-                                                className="btn btn-link p-0 text-decoration-none"
-                                                onClick={() => alert(witness.statement)}
-                                              >
-                                                View full statement
-                                              </button>
-                                            </small>
-                                          </>
-                                        ) : (
-                                          witness.statement
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </Table>
-                          ) : (
-                            <p className="text-muted mb-4">No witness statements recorded.</p>
-                          )}
-
-                          {/* UPDATED: Criminal Records Section - REMOVED Type and Photo columns */}
-                          <h6 className="fw-bold mb-3">Criminal Records</h6>
-                          {caseDetails[c.id]?.criminalRecords?.length > 0 ? (
-                            <Table striped bordered responsive size="sm" className="mb-4">
-                              <thead>
-                                <tr>
-                                  <th>Name</th>
-                                  <th>Aadhaar</th>
-                                  <th>Age</th>
-                                  <th>Gender</th>
-                                  <th>District</th>
-                                  <th>Offenses</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {caseDetails[c.id].criminalRecords.map(record => {
-                                  const criminalInfo = getCriminalDisplayInfo(record);
-                                  
-                                  return (
-                                    <tr key={record.record_id || record.id}>
-                                      <td>
-                                        <strong>{criminalInfo.criminal_name}</strong>
-                                      </td>
-                                      <td>
-                                        {criminalInfo.aadhaar_number ? (
-                                          <span className="font-monospace">{criminalInfo.aadhaar_number}</span>
-                                        ) : (
-                                          <span className="text-muted">N/A</span>
-                                        )}
-                                      </td>
-                                      <td>{criminalInfo.criminal_age || 'N/A'}</td>
-                                      <td>{criminalInfo.criminal_gender || 'N/A'}</td>
-                                      <td>
-                                        {criminalInfo.criminal_district ? `District ${criminalInfo.criminal_district}` : 'N/A'}
-                                      </td>
-                                      <td>
-                                        <div style={{ maxWidth: '200px' }}>
-                                          {record.offenses && record.offenses.length > 50 ? (
-                                            <>
-                                              {record.offenses.substring(0, 50)}...
-                                              <br />
-                                              <small>
-                                                <button 
-                                                  className="btn btn-link p-0 text-decoration-none"
-                                                  onClick={() => alert(record.offenses)}
-                                                >
-                                                  View full offenses
-                                                </button>
-                                              </small>
-                                            </>
-                                          ) : (
-                                            record.offenses || 'No offenses description'
-                                          )}
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </Table>
-                          ) : (
-                            <p className="text-muted">No criminal records recorded.</p>
-                          )}
-                        </div>
-                      </Accordion.Collapse>
-                    </Card.Body>
-                  </Card>
-                ))}
-              </Accordion>
+                      </Card.Body>
+                    </Card>
+                  );
+                })}
+              </div>
             ) : (
               <Card className="border-0 shadow-sm auth-card">
                 <Card.Body className="p-4">
@@ -1011,7 +1172,224 @@ export default function Dashboard() {
             </Col>
           </Row>
         )}
+          <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1050 }}>
+            <Link to="/chat" className="btn btn-primary btn-lg rounded-circle shadow">
+              <i className="bi bi-chat-dots"></i>
+            </Link>
+          </div>
       </Container>
+      
+
+      {/* Case Details Modal - UPDATED INVESTIGATOR DISPLAY */}
+      <Modal show={showCaseModal} onHide={() => setShowCaseModal(false)} size="xl" scrollable>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Case Details - {selectedCase?.case_number ? `#${selectedCase.case_number}` : `Case #${selectedCase?.id}`}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedCase && (
+            <div>
+              {/* Case Information */}
+              <Card className="border-0 shadow-sm mb-4">
+                <Card.Body>
+                  <h5 className="fw-bold mb-3">Case Information</h5>
+                  <Row>
+                    <Col md={6}>
+                      <p><strong>Case Number:</strong> {selectedCase.case_number ? `#${selectedCase.case_number}` : `#${selectedCase.id}`}</p>
+                      <p><strong>Crime Type:</strong> {selectedCase.primary_type || 'N/A'}</p>
+                      <p><strong>Status:</strong> {getStatusBadge(selectedCase.status)}</p>
+                      <p><strong>Location:</strong> {selectedCase.location_description || selectedCase.location || 'N/A'}</p>
+                    </Col>
+                    <Col md={6}>
+                      <p><strong>District:</strong> {selectedCase.district || 'N/A'}</p>
+                      <p><strong>Ward:</strong> {selectedCase.ward || 'N/A'}</p>
+                      <p><strong>Date & Time:</strong> {selectedCase.date_time ? new Date(selectedCase.date_time).toLocaleString() : 'N/A'}</p>
+                      <p><strong>Investigator:</strong> 
+                        <Badge bg={getInvestigatorDisplayName(selectedCase) !== 'Not assigned' ? 'primary' : 'secondary'} className="ms-2">
+                          {getInvestigatorDisplayName(selectedCase)}
+                          {isCurrentUserInvestigator(selectedCase) && ' (You)'}
+                        </Badge>
+                        {getInvestigatorDetails(selectedCase)?.rank && (
+                          <Badge bg="info" className="ms-1">
+                            {getInvestigatorDetails(selectedCase).rank}
+                          </Badge>
+                        )}
+                      </p>
+                    </Col>
+                  </Row>
+                  {selectedCase.description && (
+                    <div className="mt-3">
+                      <strong>Description:</strong>
+                      <p className="mt-1">{selectedCase.description}</p>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+
+              {/* Evidence Section */}
+              <h6 className="fw-bold mb-3">Evidence</h6>
+              {caseDetails[selectedCase.id]?.evidence?.length > 0 ? (
+                <Table striped bordered responsive size="sm" className="mb-4">
+                  <thead>
+                    <tr>
+                      <th>Type of Evidence</th>
+                      <th>Details</th>
+                      <th>File</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caseDetails[selectedCase.id].evidence.map(evidence => (
+                      <tr key={evidence.id}>
+                        <td>{evidence.type_of_evidence}</td>
+                        <td>{evidence.details}</td>
+                        <td>
+                          {evidence.file ? (
+                            <a href={evidence.file} target="_blank" rel="noopener noreferrer">
+                              View File
+                            </a>
+                          ) : (
+                            'No file'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <p className="text-muted mb-4">No evidence recorded.</p>
+              )}
+
+              {/* Witnesses Section */}
+              <h6 className="fw-bold mb-3">Witnesses</h6>
+              {caseDetails[selectedCase.id]?.witnesses?.length > 0 ? (
+                <Table striped bordered responsive size="sm" className="mb-4">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Aadhaar Number</th>
+                      <th>Contact Information</th>
+                      <th>Statement</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caseDetails[selectedCase.id].witnesses.map(witness => (
+                      <tr key={witness.id || witness.witness_id}>
+                        <td>
+                          <strong>{witness.name}</strong>
+                        </td>
+                        <td>
+                          {witness.aadhaar_number ? (
+                            <span className="font-monospace">{witness.aadhaar_number}</span>
+                          ) : (
+                            <span className="text-muted">Not provided</span>
+                          )}
+                        </td>
+                        <td>
+                          {witness.contact_info ? (
+                            formatContactInfo(witness.contact_info)
+                          ) : (
+                            <span className="text-muted">Not provided</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ maxWidth: '200px' }}>
+                            {witness.statement.length > 100 ? (
+                              <>
+                                {witness.statement.substring(0, 100)}...
+                                <br />
+                                <small>
+                                  <button 
+                                    className="btn btn-link p-0 text-decoration-none"
+                                    onClick={() => alert(witness.statement)}
+                                  >
+                                    View full statement
+                                  </button>
+                                </small>
+                              </>
+                            ) : (
+                              witness.statement
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <p className="text-muted mb-4">No witness statements recorded.</p>
+              )}
+
+              {/* Criminal Records Section */}
+              <h6 className="fw-bold mb-3">Criminal Records</h6>
+              {caseDetails[selectedCase.id]?.criminalRecords?.length > 0 ? (
+                <Table striped bordered responsive size="sm" className="mb-4">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Aadhaar</th>
+                      <th>Age</th>
+                      <th>Gender</th>
+                      <th>District</th>
+                      <th>Offenses</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caseDetails[selectedCase.id].criminalRecords.map(record => {
+                      const criminalInfo = getCriminalDisplayInfo(record);
+                      
+                      return (
+                        <tr key={record.record_id || record.id}>
+                          <td>
+                            <strong>{criminalInfo.criminal_name}</strong>
+                          </td>
+                          <td>
+                            {criminalInfo.aadhaar_number ? (
+                              <span className="font-monospace">{criminalInfo.aadhaar_number}</span>
+                            ) : (
+                              <span className="text-muted">N/A</span>
+                            )}
+                          </td>
+                          <td>{criminalInfo.criminal_age || 'N/A'}</td>
+                          <td>{criminalInfo.criminal_gender || 'N/A'}</td>
+                          <td>
+                            {criminalInfo.criminal_district ? `District ${criminalInfo.criminal_district}` : 'N/A'}
+                          </td>
+                          <td>
+                            <div style={{ maxWidth: '200px' }}>
+                              {record.offenses && record.offenses.length > 50 ? (
+                                <>
+                                  {record.offenses.substring(0, 50)}...
+                                  <br />
+                                  <small>
+                                    <button 
+                                      className="btn btn-link p-0 text-decoration-none"
+                                      onClick={() => alert(record.offenses)}
+                                    >
+                                      View full offenses
+                                    </button>
+                                  </small>
+                                </>
+                              ) : (
+                                record.offenses || 'No offenses description'
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              ) : (
+                <p className="text-muted">No criminal records recorded.</p>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        {/* REMOVED: Modal.Footer section with Close and Predict Suspects buttons */}
+      </Modal>
+      
     </div>
+    
   );
 }

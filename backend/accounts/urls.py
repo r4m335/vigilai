@@ -7,10 +7,13 @@ from accounts.views import (
     RegisterView,
     UserProfileView,
     LoginView,
+    UserListViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'profile', UserProfileView, basename='user-profile')
+router.register(r'users', UserListViewSet, basename='user-list')
+
 
 urlpatterns = [
      # REST router for profile

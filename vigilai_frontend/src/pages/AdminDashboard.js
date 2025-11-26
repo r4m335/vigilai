@@ -18,6 +18,7 @@ import {
 } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { logout, getToken } from './cases/services/Authservice';
+import NotificationService from './cases/services/NotificationService';
 
 function AdminDashboard() {
   const [users, setUsers] = useState([]);
@@ -29,18 +30,126 @@ function AdminDashboard() {
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedCase, setSelectedCase] = useState(null);
+  const [showCaseModal, setShowCaseModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasNewNotifications, setHasNewNotifications] = useState(false);
   
   // Search and filter states
   const [userSearch, setUserSearch] = useState('');
   const [userRankFilter, setUserRankFilter] = useState('');
   const [caseSearch, setCaseSearch] = useState('');
   const [caseTypeFilter, setCaseTypeFilter] = useState('');
+  const [caseStatusFilter, setCaseStatusFilter] = useState('');
   
   const navigate = useNavigate();
 
-  // Simplified stats cards - only users and cases
+  // Case data accessor functions - MOVED TO TOP
+  const getCaseType = (caseItem) => {
+    return caseItem?.primary_type || 'N/A';
+  };
+
+  const getCaseStatus = (caseItem) => {
+    return caseItem?.status || 'Open';
+  };
+
+  const getCaseLocation = (caseItem) => {
+    return caseItem?.location_description || `District ${caseItem?.district || 'N/A'}`;
+  };
+
+  const getCaseInvestigator = (caseItem) => {
+    console.log('Case item:', caseItem); // Debug log
+    
+    // Check if investigator exists and is not null/undefined
+    if (caseItem?.investigator) {
+      console.log('Investigator found:', caseItem.investigator); // Debug log
+      
+      if (typeof caseItem.investigator === 'object') {
+        const name = `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim();
+        return name || 'Unknown Investigator';
+      }
+      
+      // If investigator is a string/number (ID)
+      if (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number') {
+        return `Investigator ID: ${caseItem.investigator}`;
+      }
+      
+      return caseItem.investigator;
+    }
+    
+    // Check for alternative field names
+    if (caseItem?.assigned_investigator) {
+      console.log('Assigned investigator found:', caseItem.assigned_investigator);
+      if (typeof caseItem.assigned_investigator === 'object') {
+        const name = `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim();
+        return name || 'Unknown Investigator';
+      }
+      return caseItem.assigned_investigator;
+    }
+    
+    console.log('No investigator found for case'); // Debug log
+    return 'Not assigned';
+  };
+
+  const getInvestigatorDetails = (caseItem) => {
+    // Check primary investigator field
+    if (caseItem?.investigator && typeof caseItem.investigator === 'object') {
+      return {
+        name: `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim(),
+        rank: caseItem.investigator.rank || 'N/A',
+        staffId: caseItem.investigator.staff_id || 'N/A',
+        id: caseItem.investigator.id
+      };
+    }
+    
+    // Check alternative field names
+    if (caseItem?.assigned_investigator && typeof caseItem.assigned_investigator === 'object') {
+      return {
+        name: `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim(),
+        rank: caseItem.assigned_investigator.rank || 'N/A',
+        staffId: caseItem.assigned_investigator.staff_id || 'N/A',
+        id: caseItem.assigned_investigator.id
+      };
+    }
+    
+    // If investigator is just an ID, try to find the user details
+    if (caseItem?.investigator && (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number')) {
+      const investigatorUser = users.find(user => user.id === caseItem.investigator || user.id === parseInt(caseItem.investigator));
+      if (investigatorUser) {
+        return {
+          name: `${investigatorUser.first_name || ''} ${investigatorUser.last_name || ''}`.trim(),
+          rank: investigatorUser.rank || 'N/A',
+          staffId: investigatorUser.staff_id || 'N/A',
+          id: investigatorUser.id
+        };
+      }
+      return {
+        name: `Investigator ID: ${caseItem.investigator}`,
+        rank: 'Unknown',
+        staffId: 'Unknown',
+        id: caseItem.investigator
+      };
+    }
+    
+    return null;
+  };
+
+  const getCaseDate = (caseItem) => {
+    return caseItem?.date_time || caseItem?.created_at;
+  };
+
+  const getCaseId = (caseItem) => {
+    return caseItem?.case_id || caseItem?.id || 'N/A';
+  };
+
+  const getCaseNumber = (caseItem) => {
+    return caseItem?.case_number || `#${getCaseId(caseItem)}`;
+  };
+
+  // Enhanced stats cards - MOVED AFTER function definitions
   const statsCards = [
     { 
       title: 'Total Users', 
@@ -55,8 +164,51 @@ function AdminDashboard() {
       color: 'success', 
       icon: '📁',
       key: 'cases'
+    },
+    { 
+      title: 'Assigned Cases', 
+      value: cases?.filter(c => getCaseInvestigator(c) !== 'Not assigned').length || 0, 
+      color: 'info', 
+      icon: '🔍',
+      key: 'assigned'
+    },
+    { 
+      title: 'Unassigned Cases', 
+      value: cases?.filter(c => getCaseInvestigator(c) === 'Not assigned').length || 0, 
+      color: 'warning', 
+      icon: '⏳',
+      key: 'unassigned'
     }
   ];
+
+  // NEW: Load unread notification count
+  const loadUnreadCount = async () => {
+    try {
+      const previousCount = unreadCount;
+      const countData = await NotificationService.getUnreadCount();
+      const newCount = countData.unread_count || 0;
+      
+      setUnreadCount(newCount);
+      
+      // Show red circle if new notifications arrived
+      if (newCount > previousCount) {
+        setHasNewNotifications(true);
+        
+        // Auto-hide the red circle after 10 seconds
+        setTimeout(() => {
+          setHasNewNotifications(false);
+        }, 10000);
+      }
+    } catch (err) {
+      console.error('Error loading unread count:', err);
+    }
+  };
+
+  // NEW: Reset new notification indicator when user clicks notifications
+  const handleNotificationsClick = () => {
+    setHasNewNotifications(false);
+    navigate('/notifications');
+  };
 
   const fetchData = async () => {
     try {
@@ -77,18 +229,17 @@ function AdminDashboard() {
 
       console.log('🔄 Fetching admin dashboard data...');
 
-      // Simplified endpoints - only users and cases
       const endpoints = [
         { key: 'users', url: '/api/admin-dashboard/users/' },
         { key: 'cases', url: '/api/admin-dashboard/cases/' }
       ];
 
-      // Fetch data for each endpoint
       const results = await Promise.allSettled(
         endpoints.map(async (endpoint) => {
           try {
             const response = await axios.get(endpoint.url, { headers });
             const data = response.data || [];
+            console.log(`✅ ${endpoint.key} data:`, data); // Debug log
             return { key: endpoint.key, data };
           } catch (err) {
             console.error(`❌ Error fetching ${endpoint.key}:`, err);
@@ -97,7 +248,6 @@ function AdminDashboard() {
         })
       );
 
-      // Process results safely
       results.forEach(result => {
         if (result.status === 'fulfilled') {
           const { key, data, error } = result.value;
@@ -110,6 +260,11 @@ function AdminDashboard() {
               case 'cases':
                 setCases(data);
                 setFilteredCases(data);
+                // Log first case to check structure
+                if (data.length > 0) {
+                  console.log('First case structure:', data[0]);
+                  console.log('First case investigator:', data[0]?.investigator);
+                }
                 break;
               default:
                 break;
@@ -137,13 +292,19 @@ function AdminDashboard() {
     }
 
     fetchData();
+    loadUnreadCount();
+
+    const notificationInterval = setInterval(() => {
+      loadUnreadCount();
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(notificationInterval);
   }, [navigate]);
 
   // Filter users based on search and filters
   useEffect(() => {
     let filtered = users;
 
-    // Apply search filter
     if (userSearch.trim() !== '') {
       filtered = filtered.filter(user => 
         user.staff_id?.toString().toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -152,7 +313,6 @@ function AdminDashboard() {
       );
     }
 
-    // Apply rank filter
     if (userRankFilter) {
       filtered = filtered.filter(user => user.rank === userRankFilter);
     }
@@ -164,21 +324,24 @@ function AdminDashboard() {
   useEffect(() => {
     let filtered = cases;
 
-    // Apply search filter
     if (caseSearch.trim() !== '') {
       filtered = filtered.filter(caseItem => 
         caseItem.case_number?.toString().toLowerCase().includes(caseSearch.toLowerCase()) ||
-        caseItem.id?.toString().toLowerCase().includes(caseSearch.toLowerCase())
+        caseItem.id?.toString().toLowerCase().includes(caseSearch.toLowerCase()) ||
+        getCaseInvestigator(caseItem).toLowerCase().includes(caseSearch.toLowerCase())
       );
     }
 
-    // Apply type filter
     if (caseTypeFilter) {
       filtered = filtered.filter(caseItem => caseItem.primary_type === caseTypeFilter);
     }
 
+    if (caseStatusFilter) {
+      filtered = filtered.filter(caseItem => getCaseStatus(caseItem) === caseStatusFilter);
+    }
+
     setFilteredCases(filtered);
-  }, [caseSearch, caseTypeFilter, cases]);
+  }, [caseSearch, caseTypeFilter, caseStatusFilter, cases]);
 
   const handleLogout = () => {
     logout();
@@ -188,6 +351,16 @@ function AdminDashboard() {
   const handleUserClick = (user) => {
     setSelectedUser(user);
     setShowUserModal(true);
+  };
+
+  const handleCaseClick = (caseItem) => {
+    setSelectedCase(caseItem);
+    setShowCaseModal(true);
+  };
+
+  const handleAssignInvestigator = (caseItem) => {
+    setSelectedCase(caseItem);
+    setShowAssignModal(true);
   };
 
   const handleVerifyUser = async (userId) => {
@@ -206,12 +379,10 @@ function AdminDashboard() {
       
       const updatedUser = response.data.user;
       
-      // Update user list
       setUsers(users.map(user => 
         user.id === userId ? updatedUser : user
       ));
       
-      // Update selected user if it's the same
       if (selectedUser && selectedUser.id === userId) {
         setSelectedUser(updatedUser);
       }
@@ -241,12 +412,10 @@ function AdminDashboard() {
       
       const updatedUser = response.data.user;
       
-      // Update user list
       setUsers(users.map(user => 
         user.id === userId ? updatedUser : user
       ));
       
-      // Update selected user if it's the same
       if (selectedUser && selectedUser.id === userId) {
         setSelectedUser(updatedUser);
       }
@@ -258,6 +427,49 @@ function AdminDashboard() {
       setError(err.response?.data?.detail || 'Failed to unverify user. Please try again.');
       setTimeout(() => setError(null), 5000);
     }
+  };
+
+  const assignInvestigator = async (investigatorId) => {
+  try {
+    const token = getToken();
+    
+    // Use selectedCase.case_id for the API endpoint
+    const caseId = selectedCase.case_id;
+    console.log('Assigning investigator:', { caseId, investigatorId, selectedCase });
+    
+    const response = await axios.patch(
+      `/api/admin-dashboard/cases/${caseId}/assign_investigator/`,
+      { investigator_id: investigatorId },
+      {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const updatedCase = response.data.case;
+    console.log('Updated case after assignment:', updatedCase);
+    
+    // FIX: Use case_id instead of id for comparison
+    setCases(cases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
+    setFilteredCases(filteredCases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
+    
+    if (selectedCase && selectedCase.case_id === updatedCase.case_id) {
+      setSelectedCase(updatedCase);
+    }
+
+    setShowAssignModal(false);
+    setSuccess(`Investigator ${investigatorId ? 'assigned' : 'removed'} successfully!`);
+    setTimeout(() => setSuccess(null), 3000);
+  } catch (err) {
+    console.error('❌ Error assigning investigator:', err);
+    setError(err.response?.data?.error || 'Failed to assign investigator. Please try again.');
+    setTimeout(() => setError(null), 5000);
+  }
+};
+  const removeInvestigator = async () => {
+    await assignInvestigator(null);
   };
 
   const refreshData = () => {
@@ -273,6 +485,7 @@ function AdminDashboard() {
   const clearCaseFilters = () => {
     setCaseSearch('');
     setCaseTypeFilter('');
+    setCaseStatusFilter('');
   };
 
   const getUniqueValues = (data, key) => {
@@ -311,46 +524,16 @@ function AdminDashboard() {
     }
   };
 
-  // CORRECTED case data accessor functions based on your Django model
-  const getCaseType = (caseItem) => {
-    return caseItem?.primary_type || 'N/A';
-  };
-
-  const getCaseStatus = (caseItem) => {
-    return caseItem?.status || 'Open';
-  };
-
-  const getCaseLocation = (caseItem) => {
-    return caseItem?.location_description || `District ${caseItem?.district || 'N/A'}`;
-  };
-
-  const getCaseInvestigator = (caseItem) => {
-    if (caseItem?.investigator) {
-      if (typeof caseItem.investigator === 'object') {
-        return `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim() || 'Unknown';
-      }
-      return caseItem.investigator;
-    }
-    return 'Unknown';
-  };
-
-  const getCaseDate = (caseItem) => {
-    return caseItem?.date_time || caseItem?.created_at;
-  };
-
-  const getCaseId = (caseItem) => {
-    return caseItem?.case_id || caseItem?.id || 'N/A';
-  };
-
-  const getCaseNumber = (caseItem) => {
-    return caseItem?.case_number || `#${getCaseId(caseItem)}`;
+  // Get available investigators (verified users)
+  const getInvestigators = () => {
+    return users.filter(user => user.is_verified);
   };
 
   const renderOverview = () => (
     <div>
       <Row className="mb-4">
         {statsCards.map((stat, index) => (
-          <Col md={6} lg={6} key={stat.key || index} className="mb-3">
+          <Col md={6} lg={3} key={stat.key || index} className="mb-3">
             <Card className="text-center border-0 shadow-sm h-100">
               <Card.Body className="d-flex flex-column justify-content-center">
                 <div className="mb-2" style={{ fontSize: '2rem' }}>{stat.icon}</div>
@@ -427,22 +610,43 @@ function AdminDashboard() {
                       <th>Case ID</th>
                       <th>Type</th>
                       <th>Status</th>
+                      <th>Investigator</th>
                       <th>Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cases.slice(0, 5).map(caseItem => (
-                      <tr key={getCaseId(caseItem)}>
-                        <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
-                        <td>{getCaseType(caseItem)}</td>
-                        <td>
-                          <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
-                            {getCaseStatus(caseItem)}
-                          </Badge>
-                        </td>
-                        <td>{formatDate(getCaseDate(caseItem))}</td>
-                      </tr>
-                    ))}
+                    {cases.slice(0, 5).map(caseItem => {
+                      const investigatorDetails = getInvestigatorDetails(caseItem);
+                      const investigatorName = getCaseInvestigator(caseItem);
+                      
+                      return (
+                        <tr key={getCaseId(caseItem)} style={{ cursor: 'pointer' }} onClick={() => handleCaseClick(caseItem)}>
+                          <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
+                          <td>{getCaseType(caseItem)}</td>
+                          <td>
+                            <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
+                              {getCaseStatus(caseItem)}
+                            </Badge>
+                          </td>
+                          <td>
+                            {investigatorDetails ? (
+                              <div>
+                                <div className="fw-semibold small">{investigatorDetails.name}</div>
+                                <small className="text-muted">{investigatorDetails.rank}</small>
+                              </div>
+                            ) : investigatorName !== 'Not assigned' ? (
+                              <div>
+                                <div className="fw-semibold small">{investigatorName}</div>
+                                <small className="text-muted">Details not available</small>
+                              </div>
+                            ) : (
+                              <Badge bg="secondary">Not assigned</Badge>
+                            )}
+                          </td>
+                          <td>{formatDate(getCaseDate(caseItem))}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </Table>
               )}
@@ -605,7 +809,7 @@ function AdminDashboard() {
     </Card>
   );
 
-  const renderCases = () => (
+   const renderCases = () => (
     <Card className="border-0 shadow-sm">
       <Card.Header className="bg-white d-flex justify-content-between align-items-center">
         <h5 className="mb-0 fw-bold">All Cases ({filteredCases?.length || 0})</h5>
@@ -617,7 +821,7 @@ function AdminDashboard() {
       {/* Case Search and Filters */}
       <Card.Body className="border-bottom">
         <Row className="g-3">
-          <Col md={8}>
+          <Col md={6}>
             <Form.Group>
               <InputGroup>
                 <InputGroup.Text>
@@ -625,11 +829,11 @@ function AdminDashboard() {
                 </InputGroup.Text>
                 <Form.Control
                   type="text"
-                  placeholder="Search cases by case number or ID..."
+                  placeholder="Search cases by ID, number, or investigator..."
                   value={caseSearch}
                   onChange={(e) => setCaseSearch(e.target.value)}
                 />
-                {(caseSearch || caseTypeFilter) && (
+                {(caseSearch || caseTypeFilter || caseStatusFilter) && (
                   <Button 
                     variant="outline-secondary" 
                     onClick={clearCaseFilters}
@@ -641,7 +845,7 @@ function AdminDashboard() {
               </InputGroup>
             </Form.Group>
           </Col>
-          <Col md={4}>
+          <Col md={3}>
             <Form.Group>
               <Form.Select
                 value={caseTypeFilter}
@@ -654,13 +858,27 @@ function AdminDashboard() {
               </Form.Select>
             </Form.Group>
           </Col>
+          <Col md={3}>
+            <Form.Group>
+              <Form.Select
+                value={caseStatusFilter}
+                onChange={(e) => setCaseStatusFilter(e.target.value)}
+              >
+                <option value="">All Statuses</option>
+                {getUniqueValues(cases, 'status').map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
         </Row>
-        {(caseSearch || caseTypeFilter) && (
+        {(caseSearch || caseTypeFilter || caseStatusFilter) && (
           <div className="mt-2">
             <small className="text-muted">
               Showing {filteredCases.length} of {cases.length} cases
               {caseSearch && ` matching "${caseSearch}"`}
               {caseTypeFilter && ` with type "${caseTypeFilter}"`}
+              {caseStatusFilter && ` with status "${caseStatusFilter}"`}
             </small>
           </div>
         )}
@@ -669,8 +887,8 @@ function AdminDashboard() {
       <Card.Body>
         {!filteredCases || filteredCases.length === 0 ? (
           <div className="text-center text-muted py-5">
-            <div className="mb-3">No cases found {caseSearch || caseTypeFilter ? 'matching your criteria' : 'in the system'}</div>
-            {(caseSearch || caseTypeFilter) && (
+            <div className="mb-3">No cases found {caseSearch || caseTypeFilter || caseStatusFilter ? 'matching your criteria' : 'in the system'}</div>
+            {(caseSearch || caseTypeFilter || caseStatusFilter) && (
               <Button variant="outline-primary" onClick={clearCaseFilters} className="me-2">
                 Clear Filters
               </Button>
@@ -689,23 +907,57 @@ function AdminDashboard() {
                 <th>Location</th>
                 <th>Investigator</th>
                 <th>Date</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredCases.map(caseItem => (
-                <tr key={getCaseId(caseItem)}>
-                  <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
-                  <td>{getCaseType(caseItem)}</td>
-                  <td>
-                    <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
-                      {getCaseStatus(caseItem)}
-                    </Badge>
-                  </td>
-                  <td>{getCaseLocation(caseItem)}</td>
-                  <td>{getCaseInvestigator(caseItem)}</td>
-                  <td>{formatDate(getCaseDate(caseItem))}</td>
-                </tr>
-              ))}
+              {filteredCases.map(caseItem => {
+                const investigatorDetails = getInvestigatorDetails(caseItem);
+                const investigatorName = getCaseInvestigator(caseItem);
+                
+                return (
+                  <tr key={getCaseId(caseItem)} style={{ cursor: 'pointer' }} onClick={() => handleCaseClick(caseItem)}>
+                    <td className="fw-semibold">{getCaseNumber(caseItem)}</td>
+                    <td>{getCaseType(caseItem)}</td>
+                    <td>
+                      <Badge bg={getStatusVariant(getCaseStatus(caseItem))}>
+                        {getCaseStatus(caseItem)}
+                      </Badge>
+                    </td>
+                    <td>{getCaseLocation(caseItem)}</td>
+                    <td>
+                      {investigatorDetails ? (
+                        <div>
+                          <div className="fw-semibold">{investigatorDetails.name}</div>
+                          <small className="text-muted">
+                            {investigatorDetails.rank} • {investigatorDetails.staffId}
+                          </small>
+                        </div>
+                      ) : investigatorName !== 'Not assigned' ? (
+                        <div>
+                          <div className="fw-semibold">{investigatorName}</div>
+                          <small className="text-muted">Basic info available</small>
+                        </div>
+                      ) : (
+                        <Badge bg="secondary">Not assigned</Badge>
+                      )}
+                    </td>
+                    <td>{formatDate(getCaseDate(caseItem))}</td>
+                    <td>
+                      <Button 
+                        size="sm" 
+                        variant={investigatorName !== 'Not assigned' ? "outline-warning" : "outline-primary"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAssignInvestigator(caseItem);
+                        }}
+                      >
+                        {investigatorName !== 'Not assigned' ? 'Change' : 'Assign'}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
@@ -728,6 +980,72 @@ function AdminDashboard() {
         <Navbar bg="white" expand="lg" className="shadow-sm">
           <Container>
             <Navbar.Brand className="fw-bold text-primary">VigilAI Admin</Navbar.Brand>
+            <div className="ms-auto d-flex align-items-center">
+              <button 
+                onClick={handleNotificationsClick}
+                className="btn btn-outline-secondary btn-sm me-2 position-relative"
+                title="Notifications"
+                style={{ border: 'none', background: 'transparent' }}
+              >
+                <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
+                
+                {/* Red circle with exclamation mark for new notifications */}
+                {hasNewNotifications && (
+                  <div 
+                    className="position-absolute top-0 start-100 translate-middle"
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: '#dc3545',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid white',
+                      animation: 'pulse 2s infinite'
+                    }}
+                  >
+                    <i 
+                      className="bi bi-exclamation text-white" 
+                      style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                    ></i>
+                  </div>
+                )}
+                
+                {/* Regular unread count badge */}
+                {unreadCount > 0 && !hasNewNotifications && (
+                  <Badge 
+                    bg="danger" 
+                    pill 
+                    className="position-absolute top-0 start-100 translate-middle"
+                    style={{ fontSize: '0.6rem' }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Badge>
+                )}
+              </button>
+              <Link to="/profile" className="text-decoration-none me-3">
+                {profilePhoto ? (
+                  <Image
+                    src={profilePhoto}
+                    alt="Profile"
+                    roundedCircle
+                    style={{ width: '35px', height: '35px', objectFit: 'cover' }}
+                    className="border"
+                  />
+                ) : (
+                  <div
+                    className="rounded-circle bg-light d-flex align-items-center justify-content-center"
+                    style={{ width: '35px', height: '35px', border: '1px solid #dee2e6' }}
+                  >
+                    <i className="bi bi-person text-muted"></i>
+                  </div>
+                )}
+              </Link>
+              <button onClick={handleLogout} className="btn btn-outline-primary btn-sm">
+                Logout
+              </button>
+            </div>
           </Container>
         </Navbar>
         <Container className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}>
@@ -743,10 +1061,54 @@ function AdminDashboard() {
 
   return (
     <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
+      {/* Updated Navbar with Notification Icon */}
       <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI Admin</Navbar.Brand>
           <div className="ms-auto d-flex align-items-center">
+            <button 
+              onClick={handleNotificationsClick}
+              className="btn btn-outline-secondary btn-sm me-2 position-relative"
+              title="Notifications"
+              style={{ border: 'none', background: 'transparent' }}
+            >
+              <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
+              
+              {/* Red circle with exclamation mark for new notifications */}
+              {hasNewNotifications && (
+                <div 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    backgroundColor: '#dc3545',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid white',
+                    animation: 'pulse 2s infinite'
+                  }}
+                >
+                  <i 
+                    className="bi bi-exclamation text-white" 
+                    style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                  ></i>
+                </div>
+              )}
+              
+              {/* Regular unread count badge */}
+              {unreadCount > 0 && !hasNewNotifications && (
+                <Badge 
+                  bg="danger" 
+                  pill 
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{ fontSize: '0.6rem' }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </button>
             <Link to="/profile" className="text-decoration-none me-3" title="Profile">
               {profilePhoto ? (
                 <Image
@@ -826,6 +1188,13 @@ function AdminDashboard() {
         {/* Tab Content */}
         {renderTabContent()}
 
+        {/* Floating Chat Icon */}
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1050 }}>
+          <Link to="/chat" className="btn btn-primary btn-lg rounded-circle shadow">
+            <i className="bi bi-chat-dots"></i>
+          </Link>
+        </div>
+
         {/* User Detail Modal */}
         <Modal show={showUserModal} onHide={() => setShowUserModal(false)} size="lg">
           <Modal.Header closeButton>
@@ -878,6 +1247,127 @@ function AdminDashboard() {
                 </Button>
               </>
             )}
+          </Modal.Footer>
+        </Modal>
+
+        {/* Case Detail Modal */}
+        <Modal show={showCaseModal} onHide={() => setShowCaseModal(false)} size="lg">
+          <Modal.Header closeButton>
+            <Modal.Title>Case Details - {selectedCase && getCaseNumber(selectedCase)}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {selectedCase && (
+              <Row>
+                <Col md={6}>
+                  <p><strong>Case ID:</strong> {getCaseId(selectedCase)}</p>
+                  <p><strong>Case Number:</strong> {getCaseNumber(selectedCase)}</p>
+                  <p><strong>Type:</strong> {getCaseType(selectedCase)}</p>
+                  <p><strong>Status:</strong> 
+                    <Badge bg={getStatusVariant(getCaseStatus(selectedCase))} className="ms-2">
+                      {getCaseStatus(selectedCase)}
+                    </Badge>
+                  </p>
+                  <p><strong>Location:</strong> {getCaseLocation(selectedCase)}</p>
+                </Col>
+                <Col md={6}>
+                  <p><strong>Investigator:</strong> 
+                    <Badge bg={getCaseInvestigator(selectedCase) !== 'Not assigned' ? 'primary' : 'secondary'} className="ms-2">
+                      {getCaseInvestigator(selectedCase)}
+                    </Badge>
+                  </p>
+                  <p><strong>Date Created:</strong> {formatDate(getCaseDate(selectedCase))}</p>
+                  <p><strong>Description:</strong> {selectedCase.description || 'No description available'}</p>
+                </Col>
+              </Row>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            {selectedCase && (
+              <>
+                <Button 
+                  variant="primary" 
+                  onClick={() => {
+                    setShowCaseModal(false);
+                    handleAssignInvestigator(selectedCase);
+                  }}
+                >
+                  {getCaseInvestigator(selectedCase) !== 'Not assigned' ? 'Change Investigator' : 'Assign Investigator'}
+                </Button>
+                <Button variant="secondary" onClick={() => setShowCaseModal(false)}>
+                  Close
+                </Button>
+              </>
+            )}
+          </Modal.Footer>
+        </Modal>
+
+        {/* Assign Investigator Modal */}
+        <Modal show={showAssignModal} onHide={() => setShowAssignModal(false)}>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              {selectedCase && `Assign Investigator - ${getCaseNumber(selectedCase)}`}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {selectedCase && (
+              <div>
+                <div className="mb-3 p-3 bg-light rounded">
+                  <h6>Case Information:</h6>
+                  <p className="mb-1"><strong>Type:</strong> {getCaseType(selectedCase)}</p>
+                  <p className="mb-1"><strong>Status:</strong> 
+                    <Badge bg={getStatusVariant(getCaseStatus(selectedCase))} className="ms-2">
+                      {getCaseStatus(selectedCase)}
+                    </Badge>
+                  </p>
+                  <p className="mb-0"><strong>Current Investigator:</strong> 
+                    <Badge bg={getCaseInvestigator(selectedCase) !== 'Not assigned' ? 'primary' : 'secondary'} className="ms-2">
+                      {getCaseInvestigator(selectedCase)}
+                    </Badge>
+                  </p>
+                </div>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label><strong>Select New Investigator</strong></Form.Label>
+                  <Form.Select
+                    onChange={(e) => {
+                      const investigatorId = e.target.value;
+                      if (investigatorId) {
+                        assignInvestigator(investigatorId);
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose an investigator --</option>
+                    {getInvestigators().map(investigator => (
+                      <option key={investigator.id} value={investigator.id}>
+                        {investigator.first_name} {investigator.last_name} 
+                        {investigator.rank && ` (${investigator.rank})`} 
+                        {investigator.staff_id && ` - ${investigator.staff_id}`}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <Form.Text className="text-muted">
+                    Only verified users are available for assignment
+                  </Form.Text>
+                </Form.Group>
+
+                {getCaseInvestigator(selectedCase) !== 'Not assigned' && (
+                  <div className="text-center border-top pt-3">
+                    <Button 
+                      variant="outline-danger" 
+                      onClick={removeInvestigator}
+                      size="sm"
+                    >
+                      Remove Current Investigator
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowAssignModal(false)}>
+              Cancel
+            </Button>
           </Modal.Footer>
         </Modal>
       </Container>

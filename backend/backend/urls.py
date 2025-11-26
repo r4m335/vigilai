@@ -16,11 +16,14 @@ urlpatterns = [
 
     # Admin dashboard (custom, not Django admin)
     path('api/', include('dashboard.urls')),
-    
+
+    path('api/', include('chat.urls')),
 
     # API Docs (Swagger / OpenAPI)
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name="schema"), name='swagger-ui'),
+
+    
 ]
 
 # Static/media during development

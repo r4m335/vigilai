@@ -7,7 +7,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import (
     UserSerializer,
     RegisterSerializer,
-    CustomTokenObtainPairSerializer
+    CustomTokenObtainPairSerializer,
+    SimpleUserSerializer,
+
 )
 from .models import CustomUser
 from rest_framework.permissions import AllowAny
@@ -129,3 +131,10 @@ class RegisterView(generics.CreateAPIView):
             "message": "Registration successful. Awaiting admin approval.",
             "email": user.email
         }, status=status.HTTP_201_CREATED)
+    
+
+
+class UserListViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CustomUser.objects.all().order_by('id')
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]

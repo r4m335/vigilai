@@ -1,3 +1,36 @@
+/* Add to your main CSS file */
+.message-content a {
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+.chat-message {
+  max-width: 70%;
+  word-wrap: break-word;
+}
+
+/* Scrollbar styling for messages */
+.messages-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 .auth-container {
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   min-height: 100vh;
