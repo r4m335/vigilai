@@ -25,7 +25,7 @@ export default function CriminalRecordForm({ caseId }) {
   const [currentCriminal, setCurrentCriminal] = useState({
     suspect: '', // Criminal ID (if existing)
     criminal_name: '',
-    criminal_age: '',
+    date_of_birth: '',
     criminal_gender: '',
     criminal_district: '',
     aadhaar_number: '',
@@ -56,6 +56,28 @@ export default function CriminalRecordForm({ caseId }) {
     value: (i + 1).toString(),
     label: `District ${i + 1}`
   }));
+
+  // Calculate age from date of birth
+  const calculateAge = (dateOfBirth) => {
+    if (!dateOfBirth) return null;
+    
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-IN');
+  };
 
   useEffect(() => {
     if (!caseId || caseId === "undefined") {
@@ -119,13 +141,13 @@ export default function CriminalRecordForm({ caseId }) {
     }
   };
 
-  // NEW: Create a criminal record
+  // Create a criminal record
   const createCriminal = async (criminalData) => {
     const token = getToken();
     const formData = new FormData();
     
     formData.append('criminal_name', criminalData.criminal_name.trim());
-    if (criminalData.criminal_age) formData.append('criminal_age', criminalData.criminal_age);
+    if (criminalData.date_of_birth) formData.append('date_of_birth', criminalData.date_of_birth);
     if (criminalData.criminal_gender) formData.append('criminal_gender', criminalData.criminal_gender);
     if (criminalData.criminal_district) formData.append('criminal_district', criminalData.criminal_district);
     if (criminalData.aadhaar_number) formData.append('aadhaar_number', criminalData.aadhaar_number);
@@ -147,7 +169,7 @@ export default function CriminalRecordForm({ caseId }) {
     return await response.json();
   };
 
-  // NEW: Create a criminal record (link criminal to case)
+  // Create a criminal record (link criminal to case)
   const createRecord = async (criminalId, offenses) => {
     const formData = new FormData();
     formData.append('case', caseId);
@@ -176,7 +198,7 @@ export default function CriminalRecordForm({ caseId }) {
     setCurrentCriminal({
       suspect: criminal.criminal_id,
       criminal_name: criminal.criminal_name,
-      criminal_age: criminal.criminal_age || '',
+      date_of_birth: criminal.date_of_birth || '',
       criminal_gender: criminal.criminal_gender || '',
       criminal_district: criminal.criminal_district || '',
       aadhaar_number: criminal.aadhaar_number || '',
@@ -245,9 +267,26 @@ export default function CriminalRecordForm({ caseId }) {
       return false;
     }
 
-    if (currentCriminal.criminal_age && (parseInt(currentCriminal.criminal_age) < 10 || parseInt(currentCriminal.criminal_age) > 120)) {
-      setError('Age must be between 10 and 120.');
-      return false;
+    // Validate date of birth (not in future)
+    if (currentCriminal.date_of_birth) {
+      const dob = new Date(currentCriminal.date_of_birth);
+      const today = new Date();
+      if (dob > today) {
+        setError('Date of birth cannot be in the future.');
+        return false;
+      }
+      
+      // Validate reasonable age (at least 10 years old)
+      const age = calculateAge(currentCriminal.date_of_birth);
+      if (age < 10) {
+        setError('Criminal must be at least 10 years old.');
+        return false;
+      }
+      
+      if (age > 120) {
+        setError('Please enter a valid date of birth.');
+        return false;
+      }
     }
 
     return true;
@@ -261,7 +300,8 @@ export default function CriminalRecordForm({ caseId }) {
     const newCriminal = {
       ...currentCriminal,
       id: Date.now(), // Temporary ID for list management
-      photoPreview: photoPreview
+      photoPreview: photoPreview,
+      calculated_age: currentCriminal.date_of_birth ? calculateAge(currentCriminal.date_of_birth) : null
     };
 
     setPendingCriminals(prev => [...prev, newCriminal]);
@@ -270,7 +310,7 @@ export default function CriminalRecordForm({ caseId }) {
     setCurrentCriminal({
       suspect: '',
       criminal_name: '',
-      criminal_age: '',
+      date_of_birth: '',
       criminal_gender: '',
       criminal_district: '',
       aadhaar_number: '',
@@ -294,7 +334,7 @@ export default function CriminalRecordForm({ caseId }) {
     setCurrentCriminal({
       suspect: criminal.suspect,
       criminal_name: criminal.criminal_name,
-      criminal_age: criminal.criminal_age,
+      date_of_birth: criminal.date_of_birth,
       criminal_gender: criminal.criminal_gender,
       criminal_district: criminal.criminal_district,
       aadhaar_number: criminal.aadhaar_number,
@@ -305,7 +345,7 @@ export default function CriminalRecordForm({ caseId }) {
     removePendingCriminal(index);
   };
 
-  // UPDATED: Submit all criminals with proper two-step process
+  // Submit all criminals with proper two-step process
   const submitAllCriminals = async () => {
     if (pendingCriminals.length === 0) {
       setError('Please add at least one criminal before submitting.');
@@ -350,7 +390,7 @@ export default function CriminalRecordForm({ caseId }) {
     setCurrentCriminal({ 
       suspect: '',
       criminal_name: '',
-      criminal_age: '', 
+      date_of_birth: '', 
       criminal_gender: '', 
       criminal_district: '', 
       aadhaar_number: '',
@@ -370,7 +410,7 @@ export default function CriminalRecordForm({ caseId }) {
     setCurrentCriminal({
       suspect: item.suspect?.criminal_id || item.suspect || '',
       criminal_name: suspectInfo.criminal_name,
-      criminal_age: suspectInfo.criminal_age || '',
+      date_of_birth: suspectInfo.date_of_birth || '',
       criminal_gender: suspectInfo.criminal_gender || '',
       criminal_district: suspectInfo.criminal_district || '',
       aadhaar_number: suspectInfo.aadhaar_number || '',
@@ -398,7 +438,7 @@ export default function CriminalRecordForm({ caseId }) {
     }
   };
 
-  // FIXED: Better suspect display info extraction
+  // Better suspect display info extraction
   const getSuspectDisplayInfo = (record) => {
     console.log('🔍 Processing record:', record); // Debug log
     
@@ -406,7 +446,7 @@ export default function CriminalRecordForm({ caseId }) {
     if (record.suspect_details) {
       return {
         criminal_name: record.suspect_details.criminal_name || 'Unknown',
-        criminal_age: record.suspect_details.criminal_age,
+        date_of_birth: record.suspect_details.date_of_birth,
         criminal_gender: record.suspect_details.criminal_gender,
         criminal_district: record.suspect_details.criminal_district,
         photo: record.suspect_details.photo,
@@ -418,7 +458,7 @@ export default function CriminalRecordForm({ caseId }) {
     if (record.suspect && typeof record.suspect === 'object') {
       return {
         criminal_name: record.suspect.criminal_name || 'Unknown',
-        criminal_age: record.suspect.criminal_age,
+        date_of_birth: record.suspect.date_of_birth,
         criminal_gender: record.suspect.criminal_gender,
         criminal_district: record.suspect.criminal_district,
         photo: record.suspect.photo,
@@ -430,7 +470,7 @@ export default function CriminalRecordForm({ caseId }) {
     if (record.criminal_name) {
       return {
         criminal_name: record.criminal_name,
-        criminal_age: record.criminal_age,
+        date_of_birth: record.date_of_birth,
         criminal_gender: record.criminal_gender,
         criminal_district: record.criminal_district,
         photo: record.photo,
@@ -441,7 +481,7 @@ export default function CriminalRecordForm({ caseId }) {
     // Case 4: Fallback - no criminal data found
     return {
       criminal_name: 'Unknown Criminal',
-      criminal_age: null,
+      date_of_birth: null,
       criminal_gender: null,
       criminal_district: null,
       photo: null,
@@ -449,7 +489,7 @@ export default function CriminalRecordForm({ caseId }) {
     };
   };
 
-  // NEW: Check if record has linked criminal
+  // Check if record has linked criminal
   const hasLinkedCriminal = (record) => {
     return record.suspect_details || (record.suspect && typeof record.suspect === 'object');
   };
@@ -579,8 +619,10 @@ export default function CriminalRecordForm({ caseId }) {
                                 <small className="text-muted">
                                   {criminal.aadhaar_number ? `Aadhaar: ${criminal.aadhaar_number}` : 'No Aadhaar'}
                                 </small>
-                                {criminal.criminal_age && (
-                                  <small className="d-block">Age: {criminal.criminal_age}</small>
+                                {criminal.date_of_birth && (
+                                  <small className="d-block">
+                                    DOB: {formatDate(criminal.date_of_birth)}
+                                  </small>
                                 )}
                               </div>
                             </div>
@@ -648,21 +690,24 @@ export default function CriminalRecordForm({ caseId }) {
                 </Row>
 
                 <Row>
-                  <Col md={4}>
+                  <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Age</Form.Label>
+                      <Form.Label>Date of Birth</Form.Label>
                       <Form.Control
-                        type="number"
-                        name="criminal_age"
-                        value={currentCriminal.criminal_age}
+                        type="date"
+                        name="date_of_birth"
+                        value={currentCriminal.date_of_birth}
                         onChange={handleCriminalChange}
-                        placeholder="Age"
-                        min="10"
-                        max="120"
+                        max={new Date().toISOString().split('T')[0]}
                       />
+                      {currentCriminal.date_of_birth && (
+                        <Form.Text className="text-muted">
+                          Age: {calculateAge(currentCriminal.date_of_birth)} years
+                        </Form.Text>
+                      )}
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>Gender</Form.Label>
                       <Form.Select
@@ -678,7 +723,7 @@ export default function CriminalRecordForm({ caseId }) {
                       </Form.Select>
                     </Form.Group>
                   </Col>
-                  <Col md={4}>
+                  <Col md={3}>
                     <Form.Group className="mb-3">
                       <Form.Label>District</Form.Label>
                       <Form.Select
@@ -736,7 +781,7 @@ export default function CriminalRecordForm({ caseId }) {
                       setCurrentCriminal({
                         suspect: '',
                         criminal_name: '',
-                        criminal_age: '',
+                        date_of_birth: '',
                         criminal_gender: '',
                         criminal_district: '',
                         aadhaar_number: '',
@@ -800,7 +845,8 @@ export default function CriminalRecordForm({ caseId }) {
                             )}
                             <div className="text-muted small">
                               {criminal.aadhaar_number && `Aadhaar: ${criminal.aadhaar_number} • `}
-                              {criminal.criminal_age && `Age: ${criminal.criminal_age} • `}
+                              {criminal.date_of_birth && `DOB: ${formatDate(criminal.date_of_birth)} • `}
+                              {criminal.calculated_age && `Age: ${criminal.calculated_age} years • `}
                               {criminal.criminal_gender && `Gender: ${criminal.criminal_gender}`}
                             </div>
                             <div className="small mt-1">
@@ -906,6 +952,7 @@ export default function CriminalRecordForm({ caseId }) {
                       <th>Photo</th>
                       <th>Name</th>
                       <th>Aadhaar</th>
+                      <th>Date of Birth</th>
                       <th>Age</th>
                       <th>Gender</th>
                       <th>District</th>
@@ -932,7 +979,8 @@ export default function CriminalRecordForm({ caseId }) {
                           <strong>{criminal.criminal_name}</strong>
                         </td>
                         <td>{criminal.aadhaar_number || 'N/A'}</td>
-                        <td>{criminal.criminal_age || 'N/A'}</td>
+                        <td>{criminal.date_of_birth ? formatDate(criminal.date_of_birth) : 'N/A'}</td>
+                        <td>{criminal.date_of_birth ? `${calculateAge(criminal.date_of_birth)} years` : 'N/A'}</td>
                         <td>{criminal.criminal_gender || 'N/A'}</td>
                         <td>{criminal.criminal_district ? `District ${criminal.criminal_district}` : 'N/A'}</td>
                         <td>
@@ -975,6 +1023,7 @@ export default function CriminalRecordForm({ caseId }) {
                     <th>Photo</th>
                     <th>Name</th>
                     <th>Aadhaar</th>
+                    <th>Date of Birth</th>
                     <th>Age</th>
                     <th>Gender</th>
                     <th>District</th>
@@ -986,6 +1035,7 @@ export default function CriminalRecordForm({ caseId }) {
                   {records.map(record => {
                     const suspectInfo = getSuspectDisplayInfo(record);
                     const hasLinked = hasLinkedCriminal(record);
+                    const age = suspectInfo.date_of_birth ? calculateAge(suspectInfo.date_of_birth) : null;
                     
                     return (
                       <tr key={record.record_id || record.id}>
@@ -1016,7 +1066,8 @@ export default function CriminalRecordForm({ caseId }) {
                           )}
                         </td>
                         <td>{suspectInfo.aadhaar_number || 'N/A'}</td>
-                        <td>{suspectInfo.criminal_age || 'N/A'}</td>
+                        <td>{suspectInfo.date_of_birth ? formatDate(suspectInfo.date_of_birth) : 'N/A'}</td>
+                        <td>{age ? `${age} years` : 'N/A'}</td>
                         <td>{suspectInfo.criminal_gender || 'N/A'}</td>
                         <td>
                           {suspectInfo.criminal_district ? `District ${suspectInfo.criminal_district}` : 'N/A'}

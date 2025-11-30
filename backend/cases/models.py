@@ -2,6 +2,9 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+from django.core.exceptions import ValidationError
 
 
 class Case(models.Model):
@@ -16,6 +19,7 @@ class Case(models.Model):
     date_time = models.DateTimeField(default=timezone.now)  # includes both date and time
     district = models.PositiveSmallIntegerField()  # 1–14 (can enforce in serializer)
     ward = models.PositiveSmallIntegerField()
+    arrest_status = models.CharField(max_length=20, choices=[('Not Arrested', 'Not Arrested'), ('Arrested', 'Arrested')], default='Not Arrested')
 
     LOCAL_GOVERNANCE_CHOICES = [
         ('Panchayat', 'Panchayat'),
@@ -62,7 +66,18 @@ class Case(models.Model):
 
     def __str__(self):
         return f"{self.case_number} - {self.primary_type} ({self.status})"
-
+    @property
+    def arrested(self):
+        return self.arrest_status == 'Arrested'
+    class Meta:
+        indexes = [
+            models.Index(fields=['case_number']),
+            models.Index(fields=['status', 'district']),
+            models.Index(fields=['created_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=['case_number'], name='unique_case_number')
+        ] 
 
 class Evidence(models.Model):
     evidence_id = models.AutoField(primary_key=True)
@@ -75,13 +90,19 @@ class Evidence(models.Model):
 
     def __str__(self):
         return f"{self.type_of_evidence} for Case {self.case.case_number}"
-
+    def clean(self):
+        if self.aadhaar_number and len(self.aadhaar_number) != 12:
+            raise ValidationError({'aadhaar_number': 'Aadhaar number must be 12 digits'})
 
 class Witness(models.Model):
     witness_id = models.AutoField(primary_key=True)
     case = models.ForeignKey(Case, related_name='witnesses', on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
-    statement = models.TextField()
+    statement = models.FileField(
+    upload_to='witness_statements/',
+    blank=True,
+    null=True,
+    help_text="Audio or video recording of the witness statement")
     aadhaar_number = models.CharField(max_length=12, unique=True)
     contact_info = models.CharField(
         max_length=100,
@@ -99,10 +120,7 @@ class Witness(models.Model):
 class Criminal(models.Model):
     criminal_id = models.AutoField(primary_key=True)
     criminal_name = models.CharField(max_length=200)
-    criminal_age = models.PositiveSmallIntegerField(
-        null=True, blank=True,
-        validators=[MinValueValidator(10), MaxValueValidator(120)]
-    )
+    date_of_birth=models.DateField(null=True, blank=True)
     GENDER_CHOICES = [
         ('Male', 'Male'),
         ('Female', 'Female'),
@@ -119,27 +137,28 @@ class Criminal(models.Model):
 
     def __str__(self):
         return f"{self.criminal_name} ({self.aadhaar_number})"
+    def clean(self):
+        if self.aadhaar_number and len(self.aadhaar_number) != 12:
+            raise ValidationError({'aadhaar_number': 'Aadhaar number must be 12 digits'})
+        if not self.aadhaar_number.isdigit():
+            raise ValidationError({'aadhaar_number': 'Aadhaar number must contain only digits'})
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['aadhaar_number'], name='unique_criminal_aadhaar')
+        ]
 
 class CriminalRecord(models.Model):
     record_id = models.AutoField(primary_key=True)
-    case = models.ForeignKey('cases.Case', on_delete=models.CASCADE, related_name='criminal_records')
-    suspect = models.ForeignKey('cases.Criminal', on_delete=models.CASCADE, related_name='records')
+    case = models.ForeignKey('cases.Case', on_delete=models.CASCADE, related_name='criminal_records', verbose_name="Associated Case")
+    suspect = models.ForeignKey('cases.Criminal', on_delete=models.CASCADE, related_name='records', verbose_name="Criminal Suspect")
     offenses = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Record: {self.suspect.criminal_name} (Case #{self.case.case_number})"
 
+    class Meta:
+        verbose_name = "Criminal Record"
+        verbose_name_plural = "Criminal Records"
 
 
-
-class SuspectPrediction(models.Model):
-    prediction_id = models.AutoField(primary_key=True)
-    case = models.ForeignKey(Case, related_name='predictions', on_delete=models.CASCADE)
-    suspect_name = models.CharField(max_length=200)
-    suspect_id = models.IntegerField(null=True, blank=True, help_text="Predicted suspect's ID")
-    probability = models.FloatField()  # ML model prediction probability
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Prediction: {self.suspect_name} ({self.probability*100:.2f}%)"

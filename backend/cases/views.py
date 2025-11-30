@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
-from .models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction, Criminal
+from .models import Case, Evidence, Witness, CriminalRecord, Criminal
 from .serializers import (
     CaseSerializer,
     EvidenceSerializer,
@@ -18,7 +18,7 @@ from .serializers import (
 )
 from .permissions import IsOwnerOrReadOnly
 from django.http import JsonResponse
-from .ml_utils import predict_suspects, predict_multiple_suspects, save_predictions_to_db, get_predictions_for_case
+from .ml_utils import predict_suspects, predict_multiple_suspects
 import json
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator

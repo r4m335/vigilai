@@ -294,7 +294,8 @@ export default function Chat() {
     
     try {
       setMessagesLoading(true);
-      const messagesData = await chatService.getMessages(room.id);
+      // Use room_id instead of id
+      const messagesData = await chatService.getMessages(room.room_id);
       console.log('Loaded messages:', messagesData);
       
       messagesData.forEach(msg => {
@@ -472,7 +473,8 @@ export default function Chat() {
       
       const notificationData = {
         message: message,
-        room_id: selectedRoom?.id
+        // Use room_id instead of id
+        room_id: selectedRoom?.room_id
       };
 
       if (mentionedUser) {
@@ -535,7 +537,8 @@ export default function Chat() {
         casesCount: casesArray?.length
       });
       
-      await chatService.sendMessage(selectedRoom.id, newMessage);
+      // Use room_id instead of id
+      await chatService.sendMessage(selectedRoom.room_id, newMessage);
       
       if (mentionedUser || mentionedCase) {
         console.log('🔔 Sending notifications for mentions...');
@@ -961,9 +964,9 @@ export default function Chat() {
                 <ListGroup variant="flush">
                   {rooms.map(room => (
                     <ListGroup.Item
-                      key={room.id}
+                      key={room.room_id}
                       action
-                      active={selectedRoom?.id === room.id}
+                      active={selectedRoom?.room_id === room.room_id}
                       onClick={() => setSelectedRoom(room)}
                       className="d-flex justify-content-between align-items-center"
                     >

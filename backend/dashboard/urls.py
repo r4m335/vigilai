@@ -6,7 +6,6 @@ from .views import (
     AdminEvidenceViewSet,
     AdminWitnessViewSet,
     AdminCriminalRecordViewSet,
-    AdminPredictionViewSet,
     test_admin_access,
 )
 
@@ -17,7 +16,7 @@ router.register('cases', AdminCaseViewSet, basename='admin-cases')
 router.register('evidence', AdminEvidenceViewSet, basename='admin-evidence')
 router.register('witnesses', AdminWitnessViewSet, basename='admin-witnesses')
 router.register('criminal-records', AdminCriminalRecordViewSet, basename='admin-criminal-records')
-router.register('predictions', AdminPredictionViewSet, basename='admin-predictions')
+
 
 urlpatterns = [
     # This will create URLs like: /api/admin-dashboard/users/, /api/admin-dashboard/cases/, etc.

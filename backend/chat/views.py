@@ -59,17 +59,18 @@ class MessageViewSet(viewsets.ModelViewSet):
 @api_view(['POST'])
 def create_mention_notification(request):
     """
-    Create a notification when a user or case is mentioned in chat
+    Create a notification ONLY when a user is directly mentioned (@user).
+    DO NOT notify owners, investigators, assigned investigators, or anyone
+    when a case is mentioned (#case).
     """
     data = request.data
     mentioned_user_id = data.get('mentioned_user_id')
-    mentioned_case_id = data.get('mentioned_case_id')
-    room_id = data.get('room_id')
     message_text = data.get('message', '')
-    
+    room_id = data.get('room_id')
+
     notifications_created = []
-    
-    # Create notification for mentioned user
+
+    # Notify ONLY the directly mentioned user
     if mentioned_user_id:
         try:
             mentioned_user = get_object_or_404(User, id=mentioned_user_id)
@@ -81,92 +82,16 @@ def create_mention_notification(request):
                 sender=request.user
             )
             notifications_created.append(notification.id)
-            print(f"✅ Created mention notification for user: {mentioned_user.email}")
+            print(f"✅ Created direct user mention notification for: {mentioned_user.email}")
         except Exception as e:
-            print(f"❌ Error creating user mention notification: {e}")
-    
-    # Create notifications for case investigators when case is mentioned
-    if mentioned_case_id:
-        try:
-            mentioned_case = get_object_or_404(Case, id=mentioned_case_id)
-            print(f"🔍 Processing case mention for case: {mentioned_case.case_number}")
-            
-            # Get all investigators assigned to this case
-            investigators = []
-            
-            # Check different possible investigator field names
-            if mentioned_case.investigator:
-                if hasattr(mentioned_case.investigator, 'id'):
-                    # Investigator is a User object
-                    investigators.append(mentioned_case.investigator)
-                    print(f"👤 Found investigator (object): {mentioned_case.investigator.email}")
-                else:
-                    # Investigator might be an ID, try to get the user
-                    try:
-                        investigator_user = User.objects.get(id=mentioned_case.investigator)
-                        investigators.append(investigator_user)
-                        print(f"👤 Found investigator (ID): {investigator_user.email}")
-                    except User.DoesNotExist:
-                        print(f"❌ Investigator user not found for ID: {mentioned_case.investigator}")
-            
-            # Check for assigned_investigator field
-            if hasattr(mentioned_case, 'assigned_investigator') and mentioned_case.assigned_investigator:
-                if hasattr(mentioned_case.assigned_investigator, 'id'):
-                    investigators.append(mentioned_case.assigned_investigator)
-                    print(f"👤 Found assigned_investigator: {mentioned_case.assigned_investigator.email}")
-                else:
-                    try:
-                        assigned_investigator = User.objects.get(id=mentioned_case.assigned_investigator)
-                        investigators.append(assigned_investigator)
-                        print(f"👤 Found assigned_investigator (ID): {assigned_investigator.email}")
-                    except User.DoesNotExist:
-                        print(f"❌ Assigned investigator user not found for ID: {mentioned_case.assigned_investigator}")
-            
-            # Check for owner field (backward compatibility)
-            if hasattr(mentioned_case, 'owner') and mentioned_case.owner:
-                if hasattr(mentioned_case.owner, 'id'):
-                    investigators.append(mentioned_case.owner)
-                    print(f"👤 Found owner: {mentioned_case.owner.email}")
-                else:
-                    try:
-                        owner_user = User.objects.get(id=mentioned_case.owner)
-                        investigators.append(owner_user)
-                        print(f"👤 Found owner (ID): {owner_user.email}")
-                    except User.DoesNotExist:
-                        print(f"❌ Owner user not found for ID: {mentioned_case.owner}")
-            
-            # Remove duplicates
-            unique_investigators = []
-            seen_ids = set()
-            for investigator in investigators:
-                if investigator.id not in seen_ids:
-                    unique_investigators.append(investigator)
-                    seen_ids.add(investigator.id)
-            
-            print(f"👥 Total unique investigators to notify: {len(unique_investigators)}")
-            
-            for investigator in unique_investigators:
-                if investigator.id != request.user.id:  # Don't notify yourself
-                    notification = Notification.objects.create(
-                        user=investigator,
-                        message=f"Case {mentioned_case.case_number} was mentioned in chat: {message_text[:100]}...",
-                        type='case_mention',
-                        room_id=room_id,
-                        mentioned_case=mentioned_case,
-                        sender=request.user
-                    )
-                    notifications_created.append(notification.id)
-                    print(f"✅ Created case mention notification for investigator: {investigator.email}")
-                else:
-                    print(f"⏩ Skipping self-notification for: {investigator.email}")
-                    
-        except Exception as e:
-            print(f"❌ Error creating case mention notification: {e}")
-    
-    print(f"📨 Total notifications created: {len(notifications_created)}")
-    
+            print(f"❌ Error creating direct mention notification: {e}")
+
+    # Case mentions create ZERO notifications now
+    # (Do nothing for mentioned_case_id)
+    print("ℹ️ Case mention received but intentionally ignored (no notifications created).")
+
     return Response({
-        "status": "success", 
+        "status": "success",
         "notifications_created": notifications_created,
         "count": len(notifications_created)
     }, status=status.HTTP_201_CREATED)

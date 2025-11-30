@@ -52,12 +52,12 @@ export default function CaseForm() {
     description: '',
     date_time: dateToInputFormat(new Date()),
     location_description: '',
-    case_status: 'Open',
-    arrest_status: 'Not Arrested',
+    status: 'Open', // ✅ CHANGED: Use 'status' instead of 'case_status'
+    arrest_status: 'Not Arrested', // ✅ This is the correct field name for backend
     district: '',
     ward: '',
-    local_governance: 'Panchayat', // New field with default
-    governance_name: '' // New field
+    local_governance: 'Panchayat',
+    governance_name: ''
   });
   const [displayDateTime, setDisplayDateTime] = useState(formatDateTimeForDisplay(new Date()));
   const [loading, setLoading] = useState(isEdit);
@@ -69,7 +69,7 @@ export default function CaseForm() {
 
   const caseStatusOptions = ['Open', 'In Progress', 'Pending', 'Closed', 'Reopened'];
   const arrestStatusOptions = ['Not Arrested', 'Arrested'];
-  const localGovernanceOptions = ['Panchayat', 'Municipal Corporation']; // New options
+  const localGovernanceOptions = ['Panchayat', 'Municipal Corporation'];
   const crimeTypeOptions = [
     'Burglary',
     'Robbery',
@@ -126,22 +126,19 @@ export default function CaseForm() {
             }
           }
 
-          // Handle backward compatibility for old data
-          const oldStatus = caseData.status || 'Open';
-          const oldIsArrested = caseData.is_arrested || false;
-          
+          // ✅ CORRECTED: Use the actual field names from backend
           setFormData({
             case_number: caseData.case_number || '',
             primary_type: caseData.primary_type || '',
             description: caseData.description || '',
             date_time: dateTimeValue,
             location_description: caseData.location_description || '',
-            case_status: caseData.case_status || oldStatus,
-            arrest_status: caseData.arrest_status || (oldIsArrested ? 'Arrested' : 'Not Arrested'),
+            status: caseData.status || 'Open', // ✅ Use 'status' directly
+            arrest_status: caseData.arrest_status || 'Not Arrested', // ✅ Use 'arrest_status' directly
             district: caseData.district || '',
             ward: caseData.ward || '',
-            local_governance: caseData.local_governance || 'Panchayat', // New field with fallback
-            governance_name: caseData.governance_name || '' // New field with fallback
+            local_governance: caseData.local_governance || 'Panchayat',
+            governance_name: caseData.governance_name || ''
           });
           
           // Set display date time
@@ -221,10 +218,19 @@ export default function CaseForm() {
       return;
     }
 
-    // ✅ CORRECTED: Prepare data for submission with proper ISO format
+    // ✅ CORRECTED: Prepare data for submission with proper field names
     const submissionData = {
-      ...formData,
-      date_time: new Date(formData.date_time).toISOString() // ✅ correct ISO format
+      case_number: formData.case_number,
+      primary_type: formData.primary_type,
+      description: formData.description,
+      date_time: new Date(formData.date_time).toISOString(),
+      location_description: formData.location_description,
+      status: formData.status, // ✅ Use 'status' directly
+      arrest_status: formData.arrest_status, // ✅ Use 'arrest_status' directly
+      district: parseInt(formData.district),
+      ward: parseInt(formData.ward),
+      local_governance: formData.local_governance,
+      governance_name: formData.governance_name
     };
 
     console.log('Submitting data:', submissionData); // Debug log
@@ -237,8 +243,12 @@ export default function CaseForm() {
       .then((response) => {
         if (!isEdit) {
           // ✅ UPDATED: Use case_id instead of id with fallback
-          setNewCaseId(response.data.case_id || response.data.id);
+          const createdCaseId = response.data.case_id || response.data.id;
+          setNewCaseId(createdCaseId);
           setError('Case created successfully! You can now add evidence, witnesses, and criminal records.');
+          
+          // Update form data with the created case ID for navigation
+          setFormData(prev => ({ ...prev }));
         } else {
           setError('Case updated successfully!');
           setTimeout(() => setError(null), 3000);
@@ -246,6 +256,7 @@ export default function CaseForm() {
       })
       .catch(err => {
         console.error('Submission error:', err);
+        console.error('Error details:', err.response?.data);
         setError(err.response?.data?.message || err.response?.data?.detail || 'Submission failed. Please try again.');
       })
       .finally(() => setSubmitting(false));
@@ -262,7 +273,6 @@ export default function CaseForm() {
 
     switch (activeTab) {
       case 'evidence':
-        // ✅ Only render EvidenceForm when we have a valid caseId
         if (!currentCaseId || currentCaseId === "undefined") {
           return (
             <div className="text-center py-4">
@@ -277,7 +287,6 @@ export default function CaseForm() {
         return <EvidenceForm caseId={currentCaseId} />;
 
       case 'witnesses':
-        // ✅ Only render WitnessForm when we have a valid caseId
         if (!currentCaseId || currentCaseId === "undefined") {
           return (
             <div className="text-center py-4">
@@ -292,7 +301,6 @@ export default function CaseForm() {
         return <WitnessForm caseId={currentCaseId} />;
 
       case 'criminal-records':
-        // ✅ Only render CriminalRecordForm when we have a valid caseId AND case is arrested
         if (!currentCaseId || currentCaseId === "undefined") {
           return (
             <div className="text-center py-4">
@@ -388,8 +396,8 @@ export default function CaseForm() {
                 <Form.Group controlId="caseStatus" className="mb-3">
                   <Form.Label className="fw-semibold">Case Status *</Form.Label>
                   <Form.Select
-                    name="case_status"
-                    value={formData.case_status}
+                    name="status" // ✅ CHANGED: Use 'status' instead of 'case_status'
+                    value={formData.status}
                     onChange={handleChange}
                     className="auth-input"
                     required
@@ -407,7 +415,7 @@ export default function CaseForm() {
                 <Form.Group controlId="arrestStatus" className="mb-3">
                   <Form.Label className="fw-semibold">Arrest Status *</Form.Label>
                   <Form.Select
-                    name="arrest_status"
+                    name="arrest_status" // ✅ This is the correct field name
                     value={formData.arrest_status}
                     onChange={handleChange}
                     className="auth-input"

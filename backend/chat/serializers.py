@@ -68,16 +68,14 @@ class MessageSerializer(serializers.ModelSerializer):
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
-    case = CaseSerializer(read_only=True)
 
     class Meta:
         model = ChatRoom
-        fields = ['id', 'name', 'case', 'created_at']
+        fields = ['room_id', 'name', 'created_at']
 
 
 class NotificationSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
-    mentioned_case = CaseSerializer(read_only=True)
     room = ChatRoomSerializer(read_only=True)
 
     class Meta:

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction, Criminal
+from .models import Case, Evidence, Witness, CriminalRecord, Criminal
 
 
 @admin.register(Case)
@@ -55,7 +55,6 @@ class CriminalRecordAdmin(admin.ModelAdmin):
     list_display = (
         'case',
         'get_criminal_name',
-        'get_criminal_age',
         'get_criminal_gender',
         'get_criminal_district',
         'created_at',
@@ -68,10 +67,6 @@ class CriminalRecordAdmin(admin.ModelAdmin):
     def get_criminal_name(self, obj):
         return obj.suspect.criminal_name
     get_criminal_name.short_description = "Name"
-
-    def get_criminal_age(self, obj):
-        return obj.suspect.criminal_age
-    get_criminal_age.short_description = "Age"
 
     def get_criminal_gender(self, obj):
         return obj.suspect.criminal_gender
@@ -93,7 +88,7 @@ class CriminalRecordAdmin(admin.ModelAdmin):
 
 @admin.register(Criminal)
 class CriminalAdmin(admin.ModelAdmin):
-    list_display = ('criminal_name', 'aadhaar_number', 'criminal_age', 'criminal_gender', 'criminal_district', 'created_at')
+    list_display = ('criminal_name', 'aadhaar_number', 'date_of_birth', 'criminal_gender', 'criminal_district', 'created_at')
     search_fields = ('criminal_name', 'aadhaar_number')
     list_filter = ('criminal_gender', 'criminal_district')
     readonly_fields = ('created_at',)
@@ -106,18 +101,4 @@ class CriminalAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return True
-    
-@admin.register(SuspectPrediction)
-class SuspectPredictionAdmin(admin.ModelAdmin):
-    list_display = ('case', 'suspect_name', 'probability', 'created_at')
-    search_fields = ('suspect_name', 'case__case_number')
-    readonly_fields = ('created_at',)
-
-    def has_add_permission(self, request):
-        return True
-
-    def has_change_permission(self, request, obj=None):
-        return True
-
-    def has_delete_permission(self, request, obj=None):
-        return True
+ 

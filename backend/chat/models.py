@@ -11,8 +11,8 @@ class ChatRoom(models.Model):
       - case-specific room
       - group room (if needed)
     """
+    room_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
-    case = models.ForeignKey(Case, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -20,6 +20,7 @@ class ChatRoom(models.Model):
 
 
 class Message(models.Model):
+    message_id = models.AutoField(primary_key=True)
     room = models.ForeignKey(ChatRoom, related_name="messages", on_delete=models.CASCADE)
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     text = models.TextField()
@@ -40,9 +41,9 @@ class Message(models.Model):
 class Notification(models.Model):
     TYPE_CHOICES = (
         ('mention', 'Mention'),
-        ('case_mention', 'Case Mention'),
         ('message', 'Message'),
     )
+    notification_id = models.AutoField(primary_key=True)
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     message = models.TextField(null=True, blank=True)
@@ -50,7 +51,6 @@ class Notification(models.Model):
 
     # Optional links
     room = models.ForeignKey(ChatRoom, null=True, blank=True, on_delete=models.CASCADE)
-    mentioned_case = models.ForeignKey(Case, null=True, blank=True, on_delete=models.CASCADE)
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                on_delete=models.SET_NULL, related_name='sent_notifications')
 

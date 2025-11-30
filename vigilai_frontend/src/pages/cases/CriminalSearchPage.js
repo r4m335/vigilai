@@ -53,7 +53,29 @@ export default function CriminalSearchPage() {
     };
   }, []);
 
-  // NEW: Load unread notification count
+  // Calculate age from date of birth
+  const calculateAge = (dateOfBirth) => {
+    if (!dateOfBirth) return null;
+    
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-IN');
+  };
+
+  // Load unread notification count
   const loadUnreadCount = async () => {
     try {
       const previousCount = unreadCount;
@@ -76,7 +98,7 @@ export default function CriminalSearchPage() {
     }
   };
 
-  // NEW: Reset new notification indicator when user clicks notifications
+  // Reset new notification indicator when user clicks notifications
   const handleNotificationsClick = () => {
     setHasNewNotifications(false);
     navigate('/notifications');
@@ -144,36 +166,6 @@ export default function CriminalSearchPage() {
   const handleLogout = () => {
     logout();
     navigate('/login');
-  };
-
-  const exportToCSV = () => {
-    if (searchResults.length === 0) {
-      setError('No data to export');
-      return;
-    }
-
-    const headers = ['Name', 'Aadhaar', 'Age', 'Gender', 'District', 'Created Date'];
-    const csvData = searchResults.map(criminal => [
-      criminal.criminal_name,
-      criminal.aadhaar_number || 'N/A',
-      criminal.criminal_age || 'N/A',
-      criminal.criminal_gender || 'N/A',
-      criminal.criminal_district ? `District ${criminal.criminal_district}` : 'N/A',
-      criminal.created_at ? new Date(criminal.created_at).toLocaleDateString() : 'N/A'
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...csvData.map(row => row.map(field => `"${field}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `criminal_search_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -314,13 +306,10 @@ export default function CriminalSearchPage() {
             {/* Search Results */}
             {searchResults.length > 0 && (
               <Card className="border-0 shadow-sm">
-                <Card.Header className="bg-white d-flex justify-content-between align-items-center">
+                <Card.Header className="bg-white">
                   <h6 className="mb-0">
                     Search Results ({searchResults.length} criminals found)
                   </h6>
-                  <Button variant="outline-success" size="sm" onClick={exportToCSV}>
-                    📊 Export to CSV
-                  </Button>
                 </Card.Header>
                 <Card.Body>
                   <div className="table-responsive">
@@ -330,6 +319,7 @@ export default function CriminalSearchPage() {
                           <th>Photo</th>
                           <th>Name</th>
                           <th>Aadhaar</th>
+                          <th>Date of Birth</th>
                           <th>Age</th>
                           <th>Gender</th>
                           <th>District</th>
@@ -373,8 +363,15 @@ export default function CriminalSearchPage() {
                               )}
                             </td>
                             <td>
-                              {criminal.criminal_age ? (
-                                <Badge bg="secondary">{criminal.criminal_age}</Badge>
+                              {criminal.date_of_birth ? (
+                                <span>{formatDate(criminal.date_of_birth)}</span>
+                              ) : (
+                                'N/A'
+                              )}
+                            </td>
+                            <td>
+                              {criminal.date_of_birth ? (
+                                <Badge bg="secondary">{calculateAge(criminal.date_of_birth)} years</Badge>
                               ) : (
                                 'N/A'
                               )}
@@ -401,7 +398,7 @@ export default function CriminalSearchPage() {
                             <td>
                               {criminal.created_at ? (
                                 <small>
-                                  {new Date(criminal.created_at).toLocaleDateString()}
+                                  {formatDate(criminal.created_at)}
                                 </small>
                               ) : (
                                 'N/A'
@@ -459,13 +456,29 @@ export default function CriminalSearchPage() {
                     </div>
                   </Col>
                   <Col md={6}>
-                    <strong>Age:</strong>
+                    <strong>Date of Birth:</strong>
                     <div className="mb-2">
-                      {selectedCriminal.criminal_age || 'Not provided'}
+                      {selectedCriminal.date_of_birth ? (
+                        <span>{formatDate(selectedCriminal.date_of_birth)}</span>
+                      ) : (
+                        'Not provided'
+                      )}
                     </div>
                   </Col>
                 </Row>
                 <Row>
+                  <Col md={6}>
+                    <strong>Age:</strong>
+                    <div className="mb-2">
+                      {selectedCriminal.date_of_birth ? (
+                        <Badge bg="secondary">
+                          {calculateAge(selectedCriminal.date_of_birth)} years
+                        </Badge>
+                      ) : (
+                        'Not provided'
+                      )}
+                    </div>
+                  </Col>
                   <Col md={6}>
                     <strong>Gender:</strong>
                     <div className="mb-2">
@@ -481,27 +494,15 @@ export default function CriminalSearchPage() {
                       )}
                     </div>
                   </Col>
+                </Row>
+                <Row>
                   <Col md={6}>
                     <strong>District:</strong>
                     <div className="mb-2">
                       {selectedCriminal.criminal_district ? (
-                        <Badge bg="outline-primary">
+                        <span className="badge bg-primary">
                           District {selectedCriminal.criminal_district}
-                        </Badge>
-                      ) : (
-                        'Not provided'
-                      )}
-                    </div>
-                  </Col>
-                </Row>
-                <Row>
-                  <Col md={6}>
-                    <strong>Ward:</strong>
-                    <div className="mb-2">
-                      {selectedCriminal.criminal_ward ? (
-                        <Badge bg="outline-secondary">
-                          Ward {selectedCriminal.criminal_ward}
-                        </Badge>
+                        </span>
                       ) : (
                         'Not provided'
                       )}
@@ -511,7 +512,7 @@ export default function CriminalSearchPage() {
                     <strong>Created Date:</strong>
                     <div className="mb-2">
                       {selectedCriminal.created_at ? (
-                        new Date(selectedCriminal.created_at).toLocaleDateString()
+                        formatDate(selectedCriminal.created_at)
                       ) : (
                         'Unknown'
                       )}
@@ -523,7 +524,7 @@ export default function CriminalSearchPage() {
                     <Col md={12}>
                       <strong>Last Updated:</strong>
                       <div className="mb-2">
-                        {new Date(selectedCriminal.updated_at).toLocaleDateString()}
+                        {formatDate(selectedCriminal.updated_at)}
                       </div>
                     </Col>
                   </Row>
@@ -535,12 +536,6 @@ export default function CriminalSearchPage() {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
             Close
-          </Button>
-          <Button variant="primary" onClick={() => {
-            // Navigate to case creation with this criminal pre-selected
-            navigate('/cases/new', { state: { selectedCriminal: selectedCriminal } });
-          }}>
-            Use in New Case
           </Button>
         </Modal.Footer>
       </Modal>

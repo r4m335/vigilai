@@ -2,9 +2,9 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from accounts.models import CustomUser
-from cases.models import Case, Evidence, Witness, CriminalRecord, SuspectPrediction
+from cases.models import Case, Evidence, Witness, CriminalRecord
 from accounts.serializers import RegisterSerializer, UserSerializer
-from cases.serializers import CaseSerializer, EvidenceSerializer, WitnessSerializer, CriminalRecordSerializer, SuspectPredictionSerializer
+from cases.serializers import CaseSerializer, EvidenceSerializer, WitnessSerializer, CriminalRecordSerializer
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
@@ -115,7 +115,3 @@ class AdminCriminalRecordViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]
 
 
-class AdminPredictionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = SuspectPrediction.objects.all()
-    serializer_class = SuspectPredictionSerializer
-    permission_classes = [permissions.IsAuthenticated, AdminOnlyPermission]

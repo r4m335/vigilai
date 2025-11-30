@@ -125,7 +125,7 @@ export default function Notifications() {
       await NotificationService.markAsRead(notificationId);
       setNotifications(prev => 
         prev.map(notif => 
-          notif.id === notificationId ? { ...notif, is_read: true } : notif
+          notif.notification_id === notificationId ? { ...notif, is_read: true } : notif
         )
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -151,14 +151,14 @@ export default function Notifications() {
   const handleNotificationClick = async (notification) => {
     // Mark as read first
     if (!notification.is_read) {
-      await handleMarkAsRead(notification.id);
+      await handleMarkAsRead(notification.notification_id);
     }
 
     // Navigate based on notification type
     if (notification.room) {
-      navigate('/chat', { state: { roomId: notification.room.id } });
+      navigate('/chat', { state: { roomId: notification.room.room_id } });
     } else if (notification.mentioned_case) {
-      navigate(`/cases/${notification.mentioned_case.id}`);
+      navigate(`/cases/${notification.mentioned_case.case_id || notification.mentioned_case.id}`);
     } else {
       navigate('/chat');
     }
@@ -264,8 +264,6 @@ export default function Notifications() {
                 <i className="bi bi-shield-check me-1"></i>Admin Dashboard
               </Button>
             )}
-            
-            
             
             {/* Notification Icon */}
             <button 
@@ -392,7 +390,7 @@ export default function Notifications() {
                   <ListGroup variant="flush">
                     {notifications.map(notification => (
                       <ListGroup.Item
-                        key={notification.id}
+                        key={notification.notification_id}
                         className={`border-0 ${!notification.is_read ? 'bg-light' : ''}`}
                         style={{ cursor: 'pointer' }}
                         onClick={() => handleNotificationClick(notification)}
@@ -426,7 +424,7 @@ export default function Notifications() {
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleMarkAsRead(notification.id);
+                                    handleMarkAsRead(notification.notification_id);
                                   }}
                                 >
                                   Mark Read

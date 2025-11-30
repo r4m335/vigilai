@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Tuple
 
 # Import Django models
 from django.db import models
-from cases.models import Criminal, SuspectPrediction  # Import your models
+from cases.models import Criminal  # Import your models
 
 # ---------------------------
 # Logging Setup
@@ -149,7 +149,7 @@ def find_similar_in_criminal_db(case_features: Dict[str, Any], top_n: int) -> Li
         criminal_dict = {
             'criminal_id': criminal.criminal_id,
             'criminal_name': criminal.criminal_name,
-            'criminal_age': criminal.criminal_age or 30,
+            'criminal_age': criminal.criminal_age,
             'criminal_gender': criminal.criminal_gender or 'Unknown',
             'criminal_district': criminal.criminal_district,
             'aadhaar_number': criminal.aadhaar_number
@@ -160,7 +160,7 @@ def find_similar_in_criminal_db(case_features: Dict[str, Any], top_n: int) -> Li
         similarities.append({
             'id': criminal.criminal_id,
             'name': criminal.criminal_name,
-            'age': criminal.criminal_age or 30,
+            'age': criminal.criminal_age ,
             'gender': criminal.criminal_gender or 'Unknown',
             'district': criminal.criminal_district,
             'ward': 'Unknown',  # Criminal table doesn't have ward
@@ -415,70 +415,6 @@ def generate_analysis(suspects: List[Dict], ml_probability: float) -> str:
         analysis += "Matches primarily from criminal database records."
     
     return analysis
-
-# ---------------------------
-# Function to save predictions to database
-# ---------------------------
-def save_predictions_to_db(case_instance, predictions_data):
-    """
-    Save prediction results to SuspectPrediction model with suspect_id
-    """
-    try:
-        # Clear existing predictions for this case
-        SuspectPrediction.objects.filter(case=case_instance).delete()
-        
-        # Save new predictions
-        saved_count = 0
-        for suspect in predictions_data.get('suspects', []):
-            # Create SuspectPrediction record with suspect_id
-            prediction = SuspectPrediction.objects.create(
-                case=case_instance,
-                suspect_name=suspect['criminal_name'],
-                suspect_id=suspect['criminal_id'],  # Save the criminal_id as suspect_id
-                probability=suspect['probability']
-            )
-            saved_count += 1
-        
-        logger.info(f"✅ Saved {saved_count} predictions to database with suspect IDs")
-        return True
-        
-    except Exception as e:
-        logger.error(f"❌ Error saving predictions to database: {e}")
-        return False
-
-# ---------------------------
-# Function to get existing predictions for a case
-# ---------------------------
-def get_predictions_for_case(case_id):
-    """
-    Retrieve existing predictions for a case
-    """
-    try:
-        predictions = SuspectPrediction.objects.filter(case_id=case_id).order_by('-probability')
-        result = []
-        
-        for pred in predictions:
-            result.append({
-                "prediction_id": pred.prediction_id,
-                "suspect_name": pred.suspect_name,
-                "suspect_id": pred.suspect_id,
-                "probability": pred.probability,
-                "created_at": pred.created_at.isoformat() if pred.created_at else None
-            })
-        
-        return {
-            "success": True,
-            "predictions": result,
-            "count": len(result)
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Error fetching predictions: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "predictions": []
-        }
 
 # ---------------------------
 # Multiple Suspect Prediction (Legacy Support)
