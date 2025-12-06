@@ -72,20 +72,36 @@ class AdminCaseViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated, AdminOnlyPermission])
     def assign_investigator(self, request, pk=None):
         case = self.get_object()
-        
         investigator_id = request.data.get('investigator_id')
-        if investigator_id == "null" or investigator_id is None:
+
+        # Removing investigator
+        if investigator_id in ["null", None, ""]:
             case.investigator = None
             case.save()
             return Response({"message": "Investigator cleared", "case": CaseSerializer(case).data})
 
+        # Missing parameter
         if not investigator_id:
             return Response({"error": "investigator_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             investigator = CustomUser.objects.get(id=investigator_id)
         except CustomUser.DoesNotExist:
             return Response({"error": "Invalid investigator_id"}, status=status.HTTP_404_NOT_FOUND)
+
+        # HARD RULE: Admins cannot be investigators
+        if investigator.is_admin or investigator.is_superuser:
+            return Response(
+                {"error": "Admins cannot be assigned as investigators"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Optional rule: Only verified investigators allowed.
+        if not investigator.is_verified:
+            return Response(
+                {"error": "User must be verified before being assigned a case"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         case.investigator = investigator
         case.save()

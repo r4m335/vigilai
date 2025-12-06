@@ -430,44 +430,45 @@ function AdminDashboard() {
   };
 
   const assignInvestigator = async (investigatorId) => {
-  try {
-    const token = getToken();
-    
-    // Use selectedCase.case_id for the API endpoint
-    const caseId = selectedCase.case_id;
-    console.log('Assigning investigator:', { caseId, investigatorId, selectedCase });
-    
-    const response = await axios.patch(
-      `/api/admin-dashboard/cases/${caseId}/assign_investigator/`,
-      { investigator_id: investigatorId },
-      {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+    try {
+      const token = getToken();
+      
+      // Use selectedCase.case_id for the API endpoint
+      const caseId = selectedCase.case_id;
+      console.log('Assigning investigator:', { caseId, investigatorId, selectedCase });
+      
+      const response = await axios.patch(
+        `/api/admin-dashboard/cases/${caseId}/assign_investigator/`,
+        { investigator_id: investigatorId },
+        {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
+      );
+
+      const updatedCase = response.data.case;
+      console.log('Updated case after assignment:', updatedCase);
+      
+      // FIX: Use case_id instead of id for comparison
+      setCases(cases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
+      setFilteredCases(filteredCases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
+      
+      if (selectedCase && selectedCase.case_id === updatedCase.case_id) {
+        setSelectedCase(updatedCase);
       }
-    );
 
-    const updatedCase = response.data.case;
-    console.log('Updated case after assignment:', updatedCase);
-    
-    // FIX: Use case_id instead of id for comparison
-    setCases(cases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
-    setFilteredCases(filteredCases.map(c => c.case_id === selectedCase.case_id ? updatedCase : c));
-    
-    if (selectedCase && selectedCase.case_id === updatedCase.case_id) {
-      setSelectedCase(updatedCase);
+      setShowAssignModal(false);
+      setSuccess(`Investigator ${investigatorId ? 'assigned' : 'removed'} successfully!`);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('❌ Error assigning investigator:', err);
+      setError(err.response?.data?.error || 'Failed to assign investigator. Please try again.');
+      setTimeout(() => setError(null), 5000);
     }
+  };
 
-    setShowAssignModal(false);
-    setSuccess(`Investigator ${investigatorId ? 'assigned' : 'removed'} successfully!`);
-    setTimeout(() => setSuccess(null), 3000);
-  } catch (err) {
-    console.error('❌ Error assigning investigator:', err);
-    setError(err.response?.data?.error || 'Failed to assign investigator. Please try again.');
-    setTimeout(() => setError(null), 5000);
-  }
-};
   const removeInvestigator = async () => {
     await assignInvestigator(null);
   };
@@ -524,9 +525,13 @@ function AdminDashboard() {
     }
   };
 
-  // Get available investigators (verified users)
+  // Get available investigators (verified users who are NOT Administrators)
   const getInvestigators = () => {
-    return users.filter(user => user.is_verified);
+    return users.filter(user => 
+      user.is_verified && 
+      user.rank && 
+      user.rank.toLowerCase() !== 'administrator'
+    );
   };
 
   const renderOverview = () => (
@@ -577,7 +582,9 @@ function AdminDashboard() {
                         <td>{user.first_name || ''} {user.last_name || ''}</td>
                         <td>{user.email || 'N/A'}</td>
                         <td>
-                          <Badge bg="info">{user.rank || 'User'}</Badge>
+                          <Badge bg={user.rank === 'Administrator' ? 'danger' : 'info'}>
+                            {user.rank || 'User'}
+                          </Badge>
                         </td>
                         <td>
                           <Badge bg={user.is_verified ? 'success' : 'warning'}>
@@ -767,7 +774,9 @@ function AdminDashboard() {
                     <Badge bg="secondary">{user.staff_id || 'N/A'}</Badge>
                   </td>
                   <td>
-                    <Badge bg="info">{user.rank || 'User'}</Badge>
+                    <Badge bg={user.rank === 'Administrator' ? 'danger' : 'info'}>
+                      {user.rank || 'User'}
+                    </Badge>
                   </td>
                   <td>
                     <Badge bg={user.is_verified ? 'success' : 'warning'}>
@@ -809,7 +818,7 @@ function AdminDashboard() {
     </Card>
   );
 
-   const renderCases = () => (
+  const renderCases = () => (
     <Card className="border-0 shadow-sm">
       <Card.Header className="bg-white d-flex justify-content-between align-items-center">
         <h5 className="mb-0 fw-bold">All Cases ({filteredCases?.length || 0})</h5>
@@ -1212,7 +1221,14 @@ function AdminDashboard() {
                 </Col>
                 <Col md={6}>
                   <p><strong>Staff ID:</strong> {selectedUser.staff_id || 'N/A'}</p>
-                  <p><strong>Rank:</strong> {selectedUser.rank || 'User'}</p>
+                  <p><strong>Rank:</strong> 
+                    <Badge 
+                      bg={selectedUser.rank === 'Administrator' ? 'danger' : 'info'} 
+                      className="ms-2"
+                    >
+                      {selectedUser.rank || 'User'}
+                    </Badge>
+                  </p>
                   <p><strong>Verified:</strong> 
                     <Badge bg={selectedUser.is_verified ? 'success' : 'warning'} className="ms-2">
                       {selectedUser.is_verified ? 'Yes' : 'No'}
@@ -1344,9 +1360,14 @@ function AdminDashboard() {
                         {investigator.staff_id && ` - ${investigator.staff_id}`}
                       </option>
                     ))}
+                    {getInvestigators().length === 0 && (
+                      <option value="" disabled>
+                        No available investigators (all are Administrators or not verified)
+                      </option>
+                    )}
                   </Form.Select>
                   <Form.Text className="text-muted">
-                    Only verified users are available for assignment
+                    Only verified users with ranks other than Administrator are available for assignment
                   </Form.Text>
                 </Form.Group>
 

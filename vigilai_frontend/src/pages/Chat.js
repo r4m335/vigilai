@@ -405,7 +405,10 @@ export default function Chat() {
     const searchTerm = mention[1].toLowerCase();
     console.log('🔍 Searching for user with term:', searchTerm);
 
+    // Filter out current user from the search
     const foundUser = usersArray.find(user => {
+      if (user.id === currentUser?.id) return false; // Skip current user
+      
       const email = user?.email?.toLowerCase() || '';
       const firstName = user?.first_name?.toLowerCase() || '';
       const lastName = user?.last_name?.toLowerCase() || '';
@@ -590,7 +593,11 @@ export default function Chat() {
         return;
       }
       const searchTerm = currentWord.substring(1).toLowerCase();
+      
+      // Filter out current user from suggestions
       const filtered = users.filter(user => {
+        if (user.id === currentUser?.id) return false; // Remove current user
+        
         const email = user?.email || '';
         const firstName = user?.first_name || '';
         const lastName = user?.last_name || '';
@@ -1198,7 +1205,7 @@ export default function Chat() {
                           placeholder={
                             !usersLoaded || !casesLoaded
                               ? "Loading users and cases..." 
-                              : "Type your message... Use @ for users, # for cases"
+                              : "Type your message... Use @ for other users, # for cases"
                           }
                           value={newMessage}
                           onChange={handleMessageChange}
@@ -1220,34 +1227,44 @@ export default function Chat() {
                         {/* User Suggestions Dropdown */}
                         {showUserSuggestions && (
                           <div className="position-absolute bottom-100 start-0 end-0 bg-white border rounded shadow-lg mb-1 z-3">
-                            {filteredUsers.map((user, index) => (
-                              <div
-                                key={user.id}
-                                className={`p-2 cursor-pointer d-flex align-items-center ${
-                                  index === suggestionIndex ? 'bg-light' : ''
-                                }`}
-                                onClick={() => selectSuggestion(index)}
-                                onMouseEnter={() => setSuggestionIndex(index)}
-                              >
-                                <Image
-                                  src={getUserPhotoUrl(user) || '/default-avatar.png'}
-                                  alt={getUserDisplayName(user)}
-                                  roundedCircle
-                                  width="30"
-                                  height="30"
-                                  className="me-2"
-                                />
-                                <div className="flex-grow-1">
-                                  <div className="fw-bold">{getUserDisplayName(user)}</div>
-                                  <small className="text-muted d-block">
-                                    {user.email}
+                            {filteredUsers.length === 0 ? (
+                              <div className="p-2 text-muted text-center">
+                                <small>No other users found</small>
+                              </div>
+                            ) : (
+                              filteredUsers.map((user, index) => (
+                                <div
+                                  key={user.id}
+                                  className={`p-2 cursor-pointer d-flex align-items-center ${
+                                    index === suggestionIndex ? 'bg-light' : ''
+                                  }`}
+                                  onClick={() => selectSuggestion(index)}
+                                  onMouseEnter={() => setSuggestionIndex(index)}
+                                >
+                                  <Image
+                                    src={getUserPhotoUrl(user) || '/default-avatar.png'}
+                                    alt={getUserDisplayName(user)}
+                                    roundedCircle
+                                    width="30"
+                                    height="30"
+                                    className="me-2"
+                                  />
+                                  <div className="flex-grow-1">
+                                    <div className="fw-bold">{getUserDisplayName(user)}</div>
+                                    <small className="text-muted d-block">
+                                      {user.email}
+                                    </small>
+                                  </div>
+                                  <small className="text-muted text-nowrap">
+                                    {user.rank || 'Officer'}
                                   </small>
                                 </div>
-                                <small className="text-muted text-nowrap">
-                                  {user.rank || 'Officer'}
-                                </small>
-                              </div>
-                            ))}
+                              ))
+                            )}
+                            <div className="border-top p-2 small text-muted">
+                              <i className="bi bi-info-circle me-1"></i>
+                              You cannot mention yourself
+                            </div>
                           </div>
                         )}
 
