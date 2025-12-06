@@ -2,10 +2,46 @@ import React, { useState, useEffect } from 'react';
 import { 
   Container, Row, Col, Card, Navbar, Button, Table, 
   ProgressBar, Alert, Spinner, Badge, Modal, Form,
-  Dropdown, InputGroup
+  Dropdown, InputGroup, Image
 } from 'react-bootstrap';
-import { useNavigate, useLocation, useParams,Link } from 'react-router-dom';
+import { useNavigate, useLocation, useParams, Link } from 'react-router-dom';
 import { getToken } from '../pages/cases/services/Authservice';
+
+// Kerala districts array with fixed order
+const KERALA_DISTRICTS = [
+  { id: 1, name: 'Thiruvananthapuram' },
+  { id: 2, name: 'Kollam' },
+  { id: 3, name: 'Pathanamthitta' },
+  { id: 4, name: 'Alappuzha' },
+  { id: 5, name: 'Kottayam' },
+  { id: 6, name: 'Idukki' },
+  { id: 7, name: 'Ernakulam' },
+  { id: 8, name: 'Thrissur' },
+  { id: 9, name: 'Palakkad' },
+  { id: 10, name: 'Malappuram' },
+  { id: 11, name: 'Kozhikode' },
+  { id: 12, name: 'Wayanad' },
+  { id: 13, name: 'Kannur' },
+  { id: 14, name: 'Kasaragod' }
+];
+
+// Function to get district name by ID
+const getDistrictName = (districtId) => {
+  if (!districtId) return 'N/A';
+  
+  const district = KERALA_DISTRICTS.find(d => d.id === parseInt(districtId));
+  return district ? district.name : `District ${districtId}`;
+};
+
+// Function to get district ID by name
+const getDistrictId = (districtName) => {
+  if (!districtName) return null;
+  
+  const district = KERALA_DISTRICTS.find(d => 
+    d.name.toLowerCase() === districtName.toLowerCase().trim()
+  );
+  return district ? district.id : null;
+};
 
 function PredictionResults() {
   const navigate = useNavigate();
@@ -75,6 +111,10 @@ function PredictionResults() {
       }
 
       const result = await response.json();
+      
+      // Log the result for debugging
+      console.log('Prediction result:', result);
+      
       setPredictionData(result);
       
       // Fetch case details with more information
@@ -215,8 +255,93 @@ function PredictionResults() {
     return 'bg-secondary';
   };
 
-  const formatProbability = (prob) => (prob * 100).toFixed(1);
-  const formatSimilarity = (sim) => (sim * 100).toFixed(1);
+  const formatProbability = (prob) => prob ? (prob * 100).toFixed(1) : '0.0';
+  const formatSimilarity = (sim) => sim ? (sim * 100).toFixed(1) : '0.0';
+
+  // Get photo URL or default placeholder
+  const getPhotoUrl = (suspect) => {
+    if (!suspect) return getDefaultPhoto();
+    
+    // Check for photo in various possible fields
+    if (suspect.photo) return suspect.photo;
+    if (suspect.profile_photo) return suspect.profile_photo;
+    if (suspect.criminal_photo) return suspect.criminal_photo;
+    if (suspect.image_url) return suspect.image_url;
+    
+    // Return default placeholder based on gender
+    return getDefaultPhoto(suspect.criminal_gender);
+  };
+
+  const getDefaultPhoto = (gender) => {
+    const genderLower = gender?.toLowerCase();
+    if (genderLower === 'female') {
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZGMzNTQ1IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgY2xhc3M9Imx1Y2lkZSBsdWNpZGUtZmVtYWxlIj48cGF0aCBkPSJNMTIgMTJhNSA1IDAgMSAwIDAtMTAgNSA1IDAgMCAwIDAgMTBaIi8+PHBhdGggZD0iTTEyIDE2djciLz48cGF0aCBkPSJNOSAyMGg2Ii8+PC9zdmc+';
+    }
+    
+    // Default male placeholder
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIzMzY2OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1tYWxlIj48cGF0aCBkPSJNMTAuMjUgMTAuMzVBNS41IDUuNSAwIDEgMCAxMiA1YTUgNSAwIDAgMCAxLjc1IDEwLjM1Ii8+PHBhdGggZD0iTTEyIDEydiIvPjxwYXRoIGQ9Ik0xNCAxOWgtNCIvPjwvc3ZnPg==';
+  };
+
+  // Calculate age from date of birth if available
+  const calculateAge = (suspect) => {
+    if (!suspect) return 'N/A';
+    
+    // First check for direct age field
+    if (suspect.age !== undefined) return suspect.age;
+    if (suspect.criminal_age !== undefined) return suspect.criminal_age;
+    
+    // Calculate from date of birth
+    if (suspect.date_of_birth) {
+      try {
+        const today = new Date();
+        const birthDate = new Date(suspect.date_of_birth);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        return age;
+      } catch (err) {
+        console.error('Error calculating age:', err);
+      }
+    }
+    
+    return 'N/A';
+  };
+
+  // Safe getter for nested properties
+  const safeGet = (obj, path, defaultValue = 'N/A') => {
+    if (!obj) return defaultValue;
+    
+    const keys = path.split('.');
+    let result = obj;
+    
+    for (const key of keys) {
+      if (result === null || result === undefined || typeof result !== 'object') {
+        return defaultValue;
+      }
+      result = result[key];
+      if (result === undefined) return defaultValue;
+    }
+    
+    return result === null || result === undefined ? defaultValue : result;
+  };
+
+  // Get district name for display
+  const getDisplayDistrict = (districtValue) => {
+    if (!districtValue || districtValue === 'Unknown') return 'N/A';
+    
+    // Try to get district name
+    const districtName = getDistrictName(districtValue);
+    
+    // If it's not a number or we got a district name
+    if (isNaN(districtValue) || districtName !== `District ${districtValue}`) {
+      return districtName;
+    }
+    
+    return `District ${districtValue}`;
+  };
 
   // Sorting and filtering functions
   const handleSort = (field) => {
@@ -235,33 +360,50 @@ function PredictionResults() {
 
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(suspect =>
-        suspect.criminal_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        suspect.criminal_id.toString().includes(searchTerm) ||
-        (suspect.aadhaar_number && suspect.aadhaar_number.includes(searchTerm))
-      );
+      filtered = filtered.filter(suspect => {
+        const name = safeGet(suspect, 'criminal_name', '').toLowerCase();
+        const id = safeGet(suspect, 'criminal_id', '').toString();
+        const aadhaar = safeGet(suspect, 'aadhaar_number', '');
+        const district = getDisplayDistrict(safeGet(suspect, 'criminal_district')).toLowerCase();
+        
+        return name.includes(searchTerm.toLowerCase()) ||
+               id.includes(searchTerm) ||
+               aadhaar.includes(searchTerm) ||
+               district.includes(searchTerm.toLowerCase());
+      });
     }
 
     // Apply data source filter
     if (filterDataSource !== 'all') {
-      filtered = filtered.filter(suspect => suspect.data_source === filterDataSource);
+      filtered = filtered.filter(suspect => safeGet(suspect, 'data_source') === filterDataSource);
     }
 
     // Apply risk level filter
     if (filterRiskLevel !== 'all') {
-      filtered = filtered.filter(suspect => 
-        suspect.risk_level.toLowerCase().includes(filterRiskLevel.toLowerCase())
-      );
+      filtered = filtered.filter(suspect => {
+        const risk = safeGet(suspect, 'risk_level', '').toLowerCase();
+        return risk.includes(filterRiskLevel.toLowerCase());
+      });
     }
 
     // Apply sorting
     filtered.sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
+      let aValue = safeGet(a, sortField, 0);
+      let bValue = safeGet(b, sortField, 0);
 
       if (sortField === 'probability' || sortField === 'similarity_score') {
-        aValue = parseFloat(aValue);
-        bValue = parseFloat(bValue);
+        aValue = parseFloat(aValue) || 0;
+        bValue = parseFloat(bValue) || 0;
+      }
+
+      if (sortField === 'criminal_name' || sortField === 'risk_level' || sortField === 'data_source') {
+        aValue = String(aValue).toLowerCase();
+        bValue = String(bValue).toLowerCase();
+      }
+
+      if (sortField === 'criminal_district') {
+        aValue = getDisplayDistrict(aValue).toLowerCase();
+        bValue = getDisplayDistrict(bValue).toLowerCase();
       }
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -365,12 +507,17 @@ function PredictionResults() {
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>District *</Form.Label>
-                          <Form.Control 
-                            type="number"
-                            placeholder="e.g., 5"
+                          <Form.Select
                             value={manualPrediction.district}
                             onChange={(e) => setManualPrediction({...manualPrediction, district: e.target.value})}
-                          />
+                          >
+                            <option value="">Select District</option>
+                            {KERALA_DISTRICTS.map(district => (
+                              <option key={district.id} value={district.id}>
+                                {district.name}
+                              </option>
+                            ))}
+                          </Form.Select>
                         </Form.Group>
                       </Col>
                       <Col md={6}>
@@ -437,7 +584,7 @@ function PredictionResults() {
     );
   }
 
-  const { suspects, analysis, ml_probability, total_candidates_found, model_version, success } = predictionData;
+  const { suspects = [], analysis, ml_probability, total_candidates_found, model_version, success } = predictionData;
   const filteredSuspects = getSortedAndFilteredSuspects();
 
   if (!success) {
@@ -452,6 +599,11 @@ function PredictionResults() {
           <Alert variant="danger">
             <h5>Prediction Failed</h5>
             <p>{predictionData.error || 'Unknown error occurred'}</p>
+            {predictionData.details && (
+              <pre className="mt-2 small bg-light p-2 rounded">
+                {JSON.stringify(predictionData.details, null, 2)}
+              </pre>
+            )}
           </Alert>
         </Container>
       </div>
@@ -490,10 +642,10 @@ function PredictionResults() {
                 {model_version && (
                   <Badge bg="info">Model: {model_version}</Badge>
                 )}
-                {total_candidates_found && (
+                {total_candidates_found !== undefined && (
                   <Badge bg="secondary">{total_candidates_found} candidates analyzed</Badge>
                 )}
-                {ml_probability && (
+                {ml_probability !== undefined && (
                   <Badge bg="primary">ML Score: {formatProbability(ml_probability)}%</Badge>
                 )}
               </div>
@@ -513,7 +665,7 @@ function PredictionResults() {
                     <Col md={6}>
                       <p><strong>Crime Type:</strong> {caseData.primary_type || 'N/A'}</p>
                       <p><strong>Location:</strong> {caseData.location_description || 'N/A'}</p>
-                      <p><strong>District:</strong> {caseData.district || 'N/A'}</p>
+                      <p><strong>District:</strong> {getDisplayDistrict(caseData.district)}</p>
                       <p><strong>Ward:</strong> {caseData.ward || 'N/A'}</p>
                     </Col>
                     <Col md={6}>
@@ -560,7 +712,7 @@ function PredictionResults() {
                     <InputGroup>
                       <InputGroup.Text>🔍</InputGroup.Text>
                       <Form.Control
-                        placeholder="Search by name, ID, or Aadhaar..."
+                        placeholder="Search by name, ID, Aadhaar, or district..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                       />
@@ -574,6 +726,7 @@ function PredictionResults() {
                       <option value="all">All Data Sources</option>
                       <option value="criminal_database">Criminal Database</option>
                       <option value="training_data">Historical Data</option>
+                      <option value="ai_generated">AI Generated</option>
                     </Form.Select>
                   </Col>
                   <Col md={4}>
@@ -591,92 +744,128 @@ function PredictionResults() {
                 
                 {filteredSuspects.length > 0 ? (
                   <>
-                    <Table striped bordered hover responsive className="align-middle">
-                      <thead className="table-dark">
-                        <tr>
-                          <th width="5%" style={{cursor: 'pointer'}} onClick={() => handleSort('rank')}>
-                            Rank {getSortIcon('rank')}
-                          </th>
-                          <th width="25%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_name')}>
-                            Suspect {getSortIcon('criminal_name')}
-                          </th>
-                          <th width="15%" style={{cursor: 'pointer'}} onClick={() => handleSort('probability')}>
-                            Probability {getSortIcon('probability')}
-                          </th>
-                          <th width="10%" style={{cursor: 'pointer'}} onClick={() => handleSort('similarity_score')}>
-                            Similarity {getSortIcon('similarity_score')}
-                          </th>
-                          <th width="10%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_age')}>
-                            Age {getSortIcon('criminal_age')}
-                          </th>
-                          <th width="20%">Location</th>
-                          <th width="15%">Risk</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredSuspects.map((suspect, index) => (
-                          <tr 
-                            key={suspect.criminal_id || index}
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => handleRowClick(suspect)}
-                            className="hover-row"
-                          >
-                            <td className="text-center">
-                              <Badge bg="dark" className="fs-6">#{suspect.rank}</Badge>
-                            </td>
-                            <td>
-                              <div>
-                                <strong>{suspect.criminal_name}</strong>
-                                <br />
-                                <small className="text-muted">ID: {suspect.criminal_id}</small>
-                                {suspect.aadhaar_number && suspect.aadhaar_number !== 'Unknown' && (
-                                  <>
-                                    <br />
-                                    <small className="text-muted">Aadhaar: {suspect.aadhaar_number}</small>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <div className="d-flex align-items-center">
-                                <span className="fw-bold me-2">{formatProbability(suspect.probability)}%</span>
-                                <ProgressBar 
-                                  now={suspect.probability * 100} 
-                                  variant={getVariant(suspect.probability)}
-                                  style={{ width: '80px', height: '8px' }}
-                                />
-                              </div>
-                              <small className="text-muted">{suspect.confidence} confidence</small>
-                            </td>
-                            <td>
-                              <Badge bg="info" className="w-100">
-                                {formatSimilarity(suspect.similarity_score)}% match
-                              </Badge>
-                            </td>
-                            <td>{suspect.criminal_age}</td>
-                            <td>
-                              <div>
-                                <small>D: {suspect.criminal_district}</small>
-                                {suspect.ward && suspect.ward !== 'Unknown' && (
-                                  <>, W: {suspect.ward}</>
-                                )}
-                                <br />
-                                <small className="text-muted">
-                                  {suspect.data_source === 'criminal_database' ? 'Criminal DB' : 
-                                   suspect.data_source === 'training_data' ? 'Historical Data' : 
-                                   suspect.data_source}
-                                </small>
-                              </div>
-                            </td>
-                            <td>
-                              <Badge className={getRiskBadge(suspect.risk_level) + " w-100"}>
-                                {suspect.risk_level}
-                              </Badge>
-                            </td>
+                    <div className="table-responsive">
+                      <Table striped bordered hover responsive className="align-middle">
+                        <thead className="table-dark">
+                          <tr>
+                            <th width="5%" style={{cursor: 'pointer'}} onClick={() => handleSort('rank')}>
+                              Rank {getSortIcon('rank')}
+                            </th>
+                            <th width="10%">Photo</th>
+                            <th width="20%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_name')}>
+                              Suspect {getSortIcon('criminal_name')}
+                            </th>
+                            <th width="15%" style={{cursor: 'pointer'}} onClick={() => handleSort('probability')}>
+                              Probability {getSortIcon('probability')}
+                            </th>
+                            <th width="10%" style={{cursor: 'pointer'}} onClick={() => handleSort('similarity_score')}>
+                              Similarity {getSortIcon('similarity_score')}
+                            </th>
+                            <th width="8%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_age')}>
+                              Age {getSortIcon('criminal_age')}
+                            </th>
+                            <th width="17%" style={{cursor: 'pointer'}} onClick={() => handleSort('criminal_district')}>
+                              Location {getSortIcon('criminal_district')}
+                            </th>
+                            <th width="15%">Risk</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </Table>
+                        </thead>
+                        <tbody>
+                          {filteredSuspects.map((suspect, index) => (
+                            <tr 
+                              key={suspect.criminal_id || index}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => handleRowClick(suspect)}
+                              className="hover-row"
+                            >
+                              <td className="text-center">
+                                <Badge bg="dark" className="fs-6">#{safeGet(suspect, 'rank', index + 1)}</Badge>
+                              </td>
+                              <td className="text-center">
+                                <div style={{ width: '60px', height: '60px', margin: '0 auto' }}>
+                                  <Image
+                                    src={getPhotoUrl(suspect)}
+                                    alt={safeGet(suspect, 'criminal_name', 'Suspect')}
+                                    fluid
+                                    className="rounded border"
+                                    style={{ 
+                                      width: '100%', 
+                                      height: '100%', 
+                                      objectFit: 'cover',
+                                      backgroundColor: '#f8f9fa'
+                                    }}
+                                    onError={(e) => {
+                                      // Fallback to icon if image fails to load
+                                      e.target.style.display = 'none';
+                                      e.target.parentElement.innerHTML = `
+                                        <div class="text-center text-muted" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                                          <i class="bi bi-person" style="font-size: 2rem;"></i>
+                                        </div>
+                                      `;
+                                    }}
+                                  />
+                                </div>
+                              </td>
+                              <td>
+                                <div>
+                                  <strong>{safeGet(suspect, 'criminal_name', 'Unknown Suspect')}</strong>
+                                  <br />
+                                  <small className="text-muted">ID: {safeGet(suspect, 'criminal_id', 'N/A')}</small>
+                                  {safeGet(suspect, 'aadhaar_number') && safeGet(suspect, 'aadhaar_number') !== 'Unknown' && (
+                                    <>
+                                      <br />
+                                      <small className="text-muted">Aadhaar: {safeGet(suspect, 'aadhaar_number')}</small>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="d-flex align-items-center">
+                                  <span className="fw-bold me-2">{formatProbability(safeGet(suspect, 'probability', 0))}%</span>
+                                  <ProgressBar 
+                                    now={safeGet(suspect, 'probability', 0) * 100} 
+                                    variant={getVariant(safeGet(suspect, 'probability', 0))}
+                                    style={{ width: '80px', height: '8px' }}
+                                  />
+                                </div>
+                                <small className="text-muted">{safeGet(suspect, 'confidence', 'Medium')} confidence</small>
+                              </td>
+                              <td>
+                                <Badge bg="info" className="w-100">
+                                  {formatSimilarity(safeGet(suspect, 'similarity_score', 0))}% match
+                                </Badge>
+                              </td>
+                              <td className="text-center">
+                                <Badge bg="secondary">
+                                  {calculateAge(suspect)} {typeof calculateAge(suspect) === 'number' ? 'yrs' : ''}
+                                </Badge>
+                              </td>
+                              <td>
+                                <div>
+                                  <strong>{getDisplayDistrict(safeGet(suspect, 'criminal_district'))}</strong>
+                                  {safeGet(suspect, 'ward') && safeGet(suspect, 'ward') !== 'Unknown' && (
+                                    <div>
+                                      <small>Ward: {safeGet(suspect, 'ward')}</small>
+                                    </div>
+                                  )}
+                                  <br />
+                                  <small className="text-muted">
+                                    {safeGet(suspect, 'data_source') === 'criminal_database' ? 'Criminal DB' : 
+                                     safeGet(suspect, 'data_source') === 'training_data' ? 'Historical Data' : 
+                                     safeGet(suspect, 'data_source', 'Unknown')}
+                                  </small>
+                                </div>
+                              </td>
+                              <td>
+                                <Badge className={getRiskBadge(safeGet(suspect, 'risk_level')) + " w-100"}>
+                                  {safeGet(suspect, 'risk_level', 'Medium')}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
 
                     {/* AI Analysis */}
                     {analysis && (
@@ -751,104 +940,138 @@ function PredictionResults() {
       <Modal show={showDetails} onHide={() => setShowDetails(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
-            Suspect Details - {selectedSuspect?.criminal_name}
+            Suspect Details - {safeGet(selectedSuspect, 'criminal_name', 'Unknown')}
             {selectedSuspect && (
-              <Badge bg="secondary" className="ms-2">{selectedSuspect.criminal_id}</Badge>
+              <Badge bg="secondary" className="ms-2">{safeGet(selectedSuspect, 'criminal_id', 'N/A')}</Badge>
             )}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedSuspect && (
             <Row>
-              <Col md={6}>
-                <h6>Personal Information</h6>
-                <Table striped bordered size="sm">
-                  <tbody>
-                    <tr>
-                      <td><strong>Name</strong></td>
-                      <td>{selectedSuspect.criminal_name}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Age</strong></td>
-                      <td>{selectedSuspect.criminal_age}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Gender</strong></td>
-                      <td>{selectedSuspect.criminal_gender}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>District</strong></td>
-                      <td>{selectedSuspect.criminal_district}</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Ward</strong></td>
-                      <td>{selectedSuspect.ward}</td>
-                    </tr>
-                    {selectedSuspect.aadhaar_number && selectedSuspect.aadhaar_number !== 'Unknown' && (
-                      <tr>
-                        <td><strong>Aadhaar Number</strong></td>
-                        <td>{selectedSuspect.aadhaar_number}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
+              <Col md={4} className="text-center">
+                <div style={{ width: '200px', height: '200px', margin: '0 auto 20px' }}>
+                  <Image
+                    src={getPhotoUrl(selectedSuspect)}
+                    alt={safeGet(selectedSuspect, 'criminal_name', 'Suspect')}
+                    fluid
+                    className="rounded border"
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      objectFit: 'cover',
+                      backgroundColor: '#f8f9fa'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.parentElement.innerHTML = `
+                        <div class="text-center text-muted" style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                          <i class="bi bi-person" style="font-size: 4rem;"></i>
+                          <div class="mt-2">No photo available</div>
+                        </div>
+                      `;
+                    }}
+                  />
+                </div>
+                {safeGet(selectedSuspect, 'photo') && (
+                  <small className="text-muted">Click image to view full size</small>
+                )}
               </Col>
-              <Col md={6}>
-                <h6>Risk Assessment</h6>
-                <Table striped bordered size="sm">
-                  <tbody>
-                    <tr>
-                      <td><strong>Probability Score</strong></td>
-                      <td>{formatProbability(selectedSuspect.probability)}%</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Similarity Score</strong></td>
-                      <td>{formatSimilarity(selectedSuspect.similarity_score)}%</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Risk Level</strong></td>
-                      <td>
-                        <Badge className={getRiskBadge(selectedSuspect.risk_level)}>
-                          {selectedSuspect.risk_level}
-                        </Badge>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><strong>Confidence</strong></td>
-                      <td>
-                        <Badge className={getConfidenceBadge(selectedSuspect.probability)}>
-                          {selectedSuspect.confidence}
-                        </Badge>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><strong>Data Source</strong></td>
-                      <td>
-                        <Badge bg="secondary">
-                          {selectedSuspect.data_source === 'criminal_database' ? 'Criminal Database' : 
-                           selectedSuspect.data_source === 'training_data' ? 'Historical Cases' : 
-                           selectedSuspect.data_source}
-                        </Badge>
-                      </td>
-                    </tr>
-                  </tbody>
-                </Table>
-              </Col>
-              <Col md={12} className="mt-3">
-                <h6>Crime Pattern Information</h6>
-                <Card className="bg-light">
-                  <Card.Body>
-                    <p className="mb-1">
-                      <strong>Associated Crime Type:</strong> {selectedSuspect.primary_type}
-                    </p>
-                    <p className="mb-1">
-                      <strong>Common Location:</strong> {selectedSuspect.location_description}
-                    </p>
-                    <p className="mb-0">
-                      <strong>Match Reason:</strong> High similarity in crime patterns, geographic proximity, and demographic profile.
-                    </p>
-                  </Card.Body>
-                </Card>
+              <Col md={8}>
+                <Row>
+                  <Col md={6}>
+                    <h6>Personal Information</h6>
+                    <Table striped bordered size="sm">
+                      <tbody>
+                        <tr>
+                          <td><strong>Name</strong></td>
+                          <td>{safeGet(selectedSuspect, 'criminal_name', 'Unknown')}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Age</strong></td>
+                          <td>{calculateAge(selectedSuspect)} years</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Gender</strong></td>
+                          <td>{safeGet(selectedSuspect, 'criminal_gender', 'Not specified')}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>District</strong></td>
+                          <td>{getDisplayDistrict(safeGet(selectedSuspect, 'criminal_district'))}</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Ward</strong></td>
+                          <td>{safeGet(selectedSuspect, 'ward', 'Unknown')}</td>
+                        </tr>
+                        {safeGet(selectedSuspect, 'aadhaar_number') && safeGet(selectedSuspect, 'aadhaar_number') !== 'Unknown' && (
+                          <tr>
+                            <td><strong>Aadhaar Number</strong></td>
+                            <td className="font-monospace">{safeGet(selectedSuspect, 'aadhaar_number')}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </Table>
+                  </Col>
+                  <Col md={6}>
+                    <h6>Risk Assessment</h6>
+                    <Table striped bordered size="sm">
+                      <tbody>
+                        <tr>
+                          <td><strong>Probability Score</strong></td>
+                          <td>{formatProbability(safeGet(selectedSuspect, 'probability', 0))}%</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Similarity Score</strong></td>
+                          <td>{formatSimilarity(safeGet(selectedSuspect, 'similarity_score', 0))}%</td>
+                        </tr>
+                        <tr>
+                          <td><strong>Risk Level</strong></td>
+                          <td>
+                            <Badge className={getRiskBadge(safeGet(selectedSuspect, 'risk_level'))}>
+                              {safeGet(selectedSuspect, 'risk_level', 'Medium')}
+                            </Badge>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Confidence</strong></td>
+                          <td>
+                            <Badge className={getConfidenceBadge(safeGet(selectedSuspect, 'probability', 0))}>
+                              {safeGet(selectedSuspect, 'confidence', 'Medium')}
+                            </Badge>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Data Source</strong></td>
+                          <td>
+                            <Badge bg="secondary">
+                              {safeGet(selectedSuspect, 'data_source') === 'criminal_database' ? 'Criminal Database' : 
+                               safeGet(selectedSuspect, 'data_source') === 'training_data' ? 'Historical Cases' : 
+                               safeGet(selectedSuspect, 'data_source', 'Unknown')}
+                            </Badge>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </Table>
+                  </Col>
+                </Row>
+                <Row>
+                  <Col md={12} className="mt-3">
+                    <h6>Crime Pattern Information</h6>
+                    <Card className="bg-light">
+                      <Card.Body>
+                        <p className="mb-1">
+                          <strong>Associated Crime Type:</strong> {safeGet(selectedSuspect, 'primary_type', 'Various')}
+                        </p>
+                        <p className="mb-1">
+                          <strong>Common Location:</strong> {safeGet(selectedSuspect, 'location_description', 'Various')}
+                        </p>
+                        <p className="mb-0">
+                          <strong>Match Reason:</strong> {safeGet(selectedSuspect, 'match_reason', 'High similarity in crime patterns, geographic proximity, and demographic profile.')}
+                        </p>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
               </Col>
             </Row>
           )}
@@ -857,7 +1080,7 @@ function PredictionResults() {
           <Button variant="secondary" onClick={() => setShowDetails(false)}>
             Close
           </Button>
-          {caseId && (
+          {caseId && selectedSuspect && safeGet(selectedSuspect, 'criminal_id') && (
             <Button variant="primary" onClick={() => {
               handleAddToInvestigation(selectedSuspect);
               setShowDetails(false);

@@ -5,6 +5,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from datetime import date
 
 
 class Case(models.Model):
@@ -142,6 +143,19 @@ class Criminal(models.Model):
             raise ValidationError({'aadhaar_number': 'Aadhaar number must be 12 digits'})
         if not self.aadhaar_number.isdigit():
             raise ValidationError({'aadhaar_number': 'Aadhaar number must contain only digits'})
+    @property
+    def criminal_age(self):
+        if not self.date_of_birth:
+            return None
+
+        today = date.today()
+        age = today.year - self.date_of_birth.year
+
+        # adjust if birthday has not occurred yet this year
+        if (today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day):
+            age -= 1
+
+        return age
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['aadhaar_number'], name='unique_criminal_aadhaar')
@@ -153,12 +167,34 @@ class CriminalRecord(models.Model):
     suspect = models.ForeignKey('cases.Criminal', on_delete=models.CASCADE, related_name='records', verbose_name="Criminal Suspect")
     offenses = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-
+    
+    # Additional fields for better tracking
+    involvement_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('SUSPECT', 'Suspect'),
+            ('ACCUSED', 'Accused'),
+            ('CONVICTED', 'Convicted'),
+            ('WANTED', 'Wanted'),
+        ],
+        default='SUSPECT'
+    )
+    status = models.CharField(
+        max_length=50,
+        choices=[
+            ('OPEN', 'Open Investigation'),
+            ('CLOSED', 'Case Closed'),
+            ('PENDING', 'Pending Trial'),
+            ('SOLVED', 'Solved'),
+        ],
+        default='OPEN'
+    )
+    
     def __str__(self):
         return f"Record: {self.suspect.criminal_name} (Case #{self.case.case_number})"
 
     class Meta:
         verbose_name = "Criminal Record"
         verbose_name_plural = "Criminal Records"
-
+        ordering = ['-created_at']
 

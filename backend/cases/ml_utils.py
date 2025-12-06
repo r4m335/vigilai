@@ -143,36 +143,60 @@ def find_similar_in_training_data(case_features: Dict[str, Any], top_n: int) -> 
 def find_similar_in_criminal_db(case_features: Dict[str, Any], top_n: int) -> List[Dict[str, Any]]:
     """Find similar suspects in criminal database"""
     similarities = []
-    
+
     for criminal in criminal_queryset:
-        # Convert Criminal model instance to dictionary for similarity calculation
+        # defensive extraction: support multiple schema variations (criminal_age, age, dob)
+        age = getattr(criminal, "criminal_age", None)
+        if age is None:
+            age = getattr(criminal, "age", None)
+        if age is None:
+            # try to compute age from dob if present
+            dob = getattr(criminal, "date_of_birth", None) or getattr(criminal, "dob", None)
+            if dob:
+                try:
+                    # dob might be a date/datetime or string
+                    from dateutil import parser
+                    dob_dt = parser.parse(dob) if isinstance(dob, str) else dob
+                    age = max(0, datetime.now().year - dob_dt.year)
+                except Exception:
+                    age = 30
+            else:
+                age = 30
+
+        district = getattr(criminal, "criminal_district", None)
+        if district is None:
+            district = getattr(criminal, "district", getattr(criminal, "home_district", "Unknown"))
+
+        name = getattr(criminal, "criminal_name", None) or getattr(criminal, "name", "Unknown")
+
         criminal_dict = {
-            'criminal_id': criminal.criminal_id,
-            'criminal_name': criminal.criminal_name,
-            'criminal_age': criminal.criminal_age,
-            'criminal_gender': criminal.criminal_gender or 'Unknown',
-            'criminal_district': criminal.criminal_district,
-            'aadhaar_number': criminal.aadhaar_number
+            'criminal_id': getattr(criminal, "criminal_id", None) or getattr(criminal, "id", None),
+            'criminal_name': name,
+            'criminal_age': int(age) if age is not None else 30,
+            'criminal_gender': getattr(criminal, "criminal_gender", None) or getattr(criminal, "gender", "Unknown"),
+            'criminal_district': district,
+            'aadhaar_number': getattr(criminal, "aadhaar_number", None)
         }
-        
+
         similarity_score = calculate_similarity_score(case_features, criminal_dict, data_type='criminal_db')
-        
+
         similarities.append({
-            'id': criminal.criminal_id,
-            'name': criminal.criminal_name,
-            'age': criminal.criminal_age ,
-            'gender': criminal.criminal_gender or 'Unknown',
-            'district': criminal.criminal_district,
-            'ward': 'Unknown',  # Criminal table doesn't have ward
-            'crime_type': 'Unknown',  # Criminal table doesn't have crime type
+            'id': criminal_dict['criminal_id'],
+            'name': criminal_dict['criminal_name'],
+            'age': criminal_dict['criminal_age'],
+            'gender': criminal_dict['criminal_gender'],
+            'district': criminal_dict['criminal_district'],
+            'ward': 'Unknown',
+            'crime_type': 'Unknown',
             'location': 'Unknown',
-            'aadhaar_number': criminal.aadhaar_number,
+            'aadhaar_number': criminal_dict['aadhaar_number'],
             'similarity_score': similarity_score,
             'data_source': 'criminal_database'
         })
-    
+
     similarities.sort(key=lambda x: x['similarity_score'], reverse=True)
     return similarities[:top_n]
+
 
 def remove_duplicate_suspects(suspects: List[Dict]) -> List[Dict]:
     """Remove duplicate suspects based on name and age"""
@@ -415,6 +439,7 @@ def generate_analysis(suspects: List[Dict], ml_probability: float) -> str:
         analysis += "Matches primarily from criminal database records."
     
     return analysis
+
 
 # ---------------------------
 # Multiple Suspect Prediction (Legacy Support)

@@ -15,6 +15,7 @@ from .serializers import (
     CriminalRecordSerializer,
     CriminalSerializer,
     CriminalRecordCreateSerializer,
+    CriminalWithCasesSerializer,
 )
 from .permissions import IsOwnerOrReadOnly
 from django.http import JsonResponse
@@ -236,7 +237,8 @@ def prepare_case_data(data):
             
             # Suspect matching features - updated field names
             "same_district": int(data.get("same_district", 1)),
-            "criminal_age": int(data.get("suspect_age", data.get("criminal_age", 30))),
+            "criminal_age": int(data.get("suspect_age", data.get("criminal_age", 30) or 30)),
+
             
             # Additional context
             "criminal_name": data.get("suspect_name", data.get("criminal_name", "Unknown")),
@@ -572,3 +574,36 @@ class HealthCheckView(APIView):
             "criminal_count": criminal_queryset.count() if criminal_queryset else 0,
             "timestamp": datetime.now().isoformat()
         })
+    
+class CriminalWithCasesView(APIView):
+    """Get criminal details with all their case records"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, criminal_id):
+        try:
+            # Get criminal with prefetched case records
+            criminal = Criminal.objects.prefetch_related(
+                models.Prefetch(
+                    'records',
+                    queryset=CriminalRecord.objects.select_related('case').order_by('-created_at')
+                )
+            ).get(criminal_id=criminal_id)
+
+            
+            serializer = CriminalWithCasesSerializer(criminal)
+            return Response({
+                "success": True,
+                "criminal": serializer.data
+            })
+            
+        except Criminal.DoesNotExist:
+            return Response(
+                {"error": f"Criminal with ID {criminal_id} not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"❌ Error fetching criminal with cases: {str(e)}")
+            return Response(
+                {"error": f"Failed to fetch criminal details: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

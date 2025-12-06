@@ -36,6 +36,7 @@ urlpatterns = [
     # Criminal search and stats
     path('criminals/search/', CriminalSearchView.as_view(), name='criminal-search'),
     path('criminals/stats/', CriminalStatsView.as_view(), name='criminal-stats'),
+    path('criminals/<int:criminal_id>/cases/', views.CriminalWithCasesView.as_view(), name='criminal-cases'),
     
     # Health and public endpoints
     path('health/', views.HealthCheckView.as_view(), name='health-check'),

@@ -39,10 +39,15 @@ class WitnessSerializer(serializers.ModelSerializer):
 # Criminal Serializer
 # -------------------------------
 class CriminalSerializer(serializers.ModelSerializer):
+    criminal_age = serializers.SerializerMethodField()
     class Meta:
         model = Criminal
         fields = '__all__'
         read_only_fields = ['criminal_id', 'created_at']
+        
+
+    def get_criminal_age(self, obj):
+        return obj.criminal_age
 
     def validate_aadhaar_number(self, value):
         if len(value) != 12:
@@ -70,6 +75,7 @@ class CriminalRecordSerializer(serializers.ModelSerializer):
     
     suspect_details = CriminalSerializer(source='suspect', read_only=True)
     case_number = serializers.CharField(source='case.case_number', read_only=True)
+    
 
     class Meta:
         model = CriminalRecord
@@ -131,7 +137,92 @@ class CriminalRecordCreateSerializer(serializers.ModelSerializer):
         criminal = Criminal.objects.create(**criminal_data)
         validated_data['suspect'] = criminal
         return CriminalRecord.objects.create(**validated_data)
+    
+class CriminalCaseRecordSerializer(serializers.ModelSerializer):
+    """Serializer for cases linked to a criminal"""
+    case_details = serializers.SerializerMethodField()
+    involvement_info = serializers.SerializerMethodField()
+    suspect_age = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CriminalRecord
+        fields = [
+            'record_id',
+            'case',
+            'case_details',
+            'offenses',
+            'involvement_type',
+            'status',
+            'created_at',
+            'involvement_info',
+            'suspect_age'
+        ]
+    
+    def get_case_details(self, obj):
+        return {
+            'case_number': obj.case.case_number,
+            'primary_type': obj.case.primary_type,
+            'location': obj.case.location_description,
+            'district': obj.case.district,
+            'date_time': obj.case.date_time,
+            'status': obj.case.status,
+            'investigator': obj.case.investigator.username if obj.case.investigator else None
+        }
+    
+    def get_involvement_info(self, obj):
+        involvement_map = {
+            'SUSPECT': {'label': 'Suspect', 'color': 'warning'},
+            'ACCUSED': {'label': 'Accused', 'color': 'danger'},
+            'CONVICTED': {'label': 'Convicted', 'color': 'dark'},
+            'WANTED': {'label': 'Wanted', 'color': 'danger'},
+        }
+        status_map = {
+            'OPEN': {'label': 'Open', 'color': 'info'},
+            'CLOSED': {'label': 'Closed', 'color': 'secondary'},
+            'PENDING': {'label': 'Pending', 'color': 'warning'},
+            'SOLVED': {'label': 'Solved', 'color': 'success'},
+        }
+        
+        return {
+            'involvement': involvement_map.get(obj.involvement_type, {'label': 'Unknown', 'color': 'secondary'}),
+            'case_status': status_map.get(obj.status, {'label': 'Unknown', 'color': 'secondary'})
+        }
+    def get_suspect_age(self, obj):
+        return obj.suspect.criminal_age
 
+class CriminalWithCasesSerializer(CriminalSerializer):
+    case_records = serializers.SerializerMethodField()
+    total_cases = serializers.SerializerMethodField()
+    criminal_age = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Criminal
+        fields = [
+            'criminal_id',
+            'criminal_name',
+            'criminal_gender',
+            'criminal_district',
+            'aadhaar_number',
+            'photo',
+            'criminal_age',
+            'created_at',
+            # extra fields
+            'case_records',
+            'total_cases'
+        ]
+        read_only_fields = ['criminal_id', 'created_at']
+
+    def get_criminal_age(self, obj):
+        return obj.criminal_age
+    
+    def get_case_records(self, obj):
+        # Get all records for this criminal, ordered by date
+        records = obj.records.all().order_by('-created_at')
+        serializer = CriminalCaseRecordSerializer(records, many=True)
+        return serializer.data
+    
+    def get_total_cases(self, obj):
+        return obj.records.count()
 
 # -------------------------------
 # Case Serializer
