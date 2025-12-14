@@ -78,6 +78,7 @@ export default function EvidenceForm({ caseId }) {
       }
     };
 
+    // Use evidence_id for editing
     const request = editingId 
       ? updateEvidence(editingId, formDataToSend, config)
       : createEvidence(formDataToSend, config);
@@ -104,12 +105,20 @@ export default function EvidenceForm({ caseId }) {
       details: item.details,
       file: null
     });
-    setEditingId(item.id);
+    // Use evidence_id instead of id
+    setEditingId(item.evidence_id);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = (evidenceId) => {
+    // Guard against undefined or invalid IDs
+    if (!evidenceId || evidenceId === "undefined") {
+      console.error("Invalid evidence ID for deletion:", evidenceId);
+      setError("Cannot delete evidence: Invalid ID.");
+      return;
+    }
+
     if (window.confirm('Are you sure you want to delete this evidence?')) {
-      deleteEvidence(id)
+      deleteEvidence(evidenceId)
         .then(() => {
           loadEvidence();
           setError('Evidence deleted successfully!');
@@ -207,7 +216,7 @@ export default function EvidenceForm({ caseId }) {
           </thead>
           <tbody>
             {evidence.map(item => (
-              <tr key={item.id}>
+              <tr key={item.evidence_id || item.id}>
                 <td>{item.type_of_evidence}</td>
                 <td>{item.details}</td>
                 <td>
@@ -220,23 +229,23 @@ export default function EvidenceForm({ caseId }) {
                   )}
                 </td>
                 <td>
-<Button 
-  variant="outline-primary" 
-  size="sm" 
-  className="me-2" 
-  onClick={() => handleEdit(item)}
-  title="Edit Evidence"
->
-  <i className="bi bi-pencil"></i>
-</Button>
-<Button 
-  variant="outline-danger" 
-  size="sm" 
-  onClick={() => handleDelete(item.id)}
-  title="Delete Evidence"
->
-  <i className="bi bi-trash"></i>
-</Button>
+                  <Button 
+                    variant="outline-primary" 
+                    size="sm" 
+                    className="me-2" 
+                    onClick={() => handleEdit(item)}
+                    title="Edit Evidence"
+                  >
+                    <i className="bi bi-pencil"></i>
+                  </Button>
+                  <Button 
+                    variant="outline-danger" 
+                    size="sm" 
+                    onClick={() => handleDelete(item.evidence_id || item.id)}
+                    title="Delete Evidence"
+                  >
+                    <i className="bi bi-trash"></i>
+                  </Button>
                 </td>
               </tr>
             ))}

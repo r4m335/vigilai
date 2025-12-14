@@ -15,10 +15,85 @@ import { logout, getToken, isAdmin, getCurrentUser } from './services/Authservic
 import NotificationService from './services/NotificationService';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
+// Kerala districts array with fixed order (same as CriminalSearchPage)
+const KERALA_DISTRICTS = [
+  { id: 1, name: 'Thiruvananthapuram' },
+  { id: 2, name: 'Kollam' },
+  { id: 3, name: 'Pathanamthitta' },
+  { id: 4, name: 'Alappuzha' },
+  { id: 5, name: 'Kottayam' },
+  { id: 6, name: 'Idukki' },
+  { id: 7, name: 'Ernakulam' },
+  { id: 8, name: 'Thrissur' },
+  { id: 9, name: 'Palakkad' },
+  { id: 10, name: 'Malappuram' },
+  { id: 11, name: 'Kozhikode' },
+  { id: 12, name: 'Wayanad' },
+  { id: 13, name: 'Kannur' },
+  { id: 14, name: 'Kasaragod' }
+];
+
+// Function to get district name by ID
+const getDistrictName = (districtId) => {
+  if (!districtId && districtId !== 0) return 'N/A';
+  
+  // Handle numeric strings
+  const id = parseInt(districtId);
+  if (isNaN(id)) return `District ${districtId}`;
+  
+  const district = KERALA_DISTRICTS.find(d => d.id === id);
+  return district ? district.name : `District ${id}`;
+};
+
+// Function to get district ID by name
+const getDistrictId = (districtName) => {
+  if (!districtName) return null;
+  
+  const district = KERALA_DISTRICTS.find(d => 
+    d.name.toLowerCase() === districtName.toLowerCase().trim()
+  );
+  return district ? district.id : null;
+};
+
+// Function to format contact info
+const formatContactInfo = (contactInfo) => {
+  if (!contactInfo) return 'N/A';
+  
+  if (contactInfo.includes('@')) {
+    return (
+      <div>
+        <div>{contactInfo}</div>
+        <small>
+          <a href={`mailto:${contactInfo}`} className="text-decoration-none">
+            📧 Send Email
+          </a>
+        </small>
+      </div>
+    );
+  }
+  
+  const cleaned = contactInfo.replace(/\D/g, '');
+  if (cleaned.length === 10) {
+    const formattedPhone = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+    return (
+      <div>
+        <div>+91 {formattedPhone}</div>
+        <small>
+          <a href={`tel:+91${cleaned}`} className="text-decoration-none">
+            📞 Call
+          </a>
+        </small>
+      </div>
+    );
+  }
+  
+  return contactInfo;
+};
+
 export default function Dashboard() {
   const [cases, setCases] = useState([]);
   const [filteredCases, setFilteredCases] = useState([]);
-  const [sortedCases, setSortedCases] = useState([]); // NEW: For sorted cases
+  const [sortedCases, setSortedCases] = useState([]);
   const [caseDetails, setCaseDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,7 +114,6 @@ export default function Dashboard() {
     dateTo: ''
   });
   
-  // NEW: Store users for investigator name lookup
   const [users, setUsers] = useState([]);
   
   const navigate = useNavigate();
@@ -56,13 +130,12 @@ export default function Dashboard() {
     loadCases();
     loadProfilePhoto();
     loadUnreadCount();
-    loadUsers(); // NEW: Load users for investigator name lookup
+    loadUsers();
 
     const notificationInterval = setInterval(() => {
       loadUnreadCount();
-    }, 30000); // Check every 30 seconds
+    }, 30000);
 
-    
     const handleStorageChange = (e) => {
       if (e.key === 'profile_photo') {
         setProfilePhoto(e.newValue);
@@ -72,11 +145,11 @@ export default function Dashboard() {
     window.addEventListener('storage', handleStorageChange);
     
     return () => {
+      clearInterval(notificationInterval);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [navigate]);
 
-  // NEW: Load users for investigator name lookup
   const loadUsers = async () => {
     try {
       const token = getToken();
@@ -97,7 +170,6 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: Load unread notification count
   const loadUnreadCount = async () => {
     try {
       const previousCount = unreadCount;
@@ -106,11 +178,9 @@ export default function Dashboard() {
       
       setUnreadCount(newCount);
       
-      // Show red circle if new notifications arrived
       if (newCount > previousCount) {
         setHasNewNotifications(true);
         
-        // Auto-hide the red circle after 10 seconds
         setTimeout(() => {
           setHasNewNotifications(false);
         }, 10000);
@@ -120,7 +190,6 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: Reset new notification indicator when user clicks notifications
   const handleNotificationsClick = () => {
     setHasNewNotifications(false);
     navigate('/notifications');
@@ -172,22 +241,18 @@ export default function Dashboard() {
     setFilteredCases(filtered);
   }, [searchTerm, filters, cases]);
 
-  // NEW: Sort cases - investigator's cases first, then by date (newest first)
   useEffect(() => {
     if (filteredCases.length > 0 && currentUser) {
       const sorted = [...filteredCases].sort((a, b) => {
-        // Check if current user is investigator for each case
         const isAInvestigator = isCaseInvestigator(a);
         const isBInvestigator = isCaseInvestigator(b);
         
-        // If both are investigator cases or both are not, sort by date
         if (isAInvestigator === isBInvestigator) {
           const dateA = new Date(a.date_time || a.date || a.created_at);
           const dateB = new Date(b.date_time || b.date || b.created_at);
-          return dateB - dateA; // Newest first
+          return dateB - dateA;
         }
         
-        // Investigator cases come first
         return isAInvestigator ? -1 : 1;
       });
       
@@ -232,30 +297,32 @@ export default function Dashboard() {
     }
   };
 
-  // UPDATED: Check if current user is the assigned investigator of a case
+  // Get unique district values with names for filter dropdown
+  const getUniqueDistricts = () => {
+    const districtIds = [...new Set(cases.map(c => c.district).filter(Boolean))].sort((a, b) => a - b);
+    return districtIds.map(id => ({
+      id,
+      name: getDistrictName(id)
+    }));
+  };
+
   const isCaseInvestigator = (caseItem) => {
     if (!currentUser) return false;
     
-    // Check if user is admin (admins can edit/delete any case)
     if (userIsAdmin) return true;
     
-    // Check if user is the assigned investigator of the case
     if (caseItem.investigator) {
-      // If investigator is an object with id
       if (typeof caseItem.investigator === 'object' && caseItem.investigator.id === currentUser.id) {
         return true;
       }
-      // If investigator is a direct ID
       if (caseItem.investigator_id === currentUser.id) {
         return true;
       }
-      // If investigator is stored as user ID directly
       if (caseItem.investigator === currentUser.id) {
         return true;
       }
     }
     
-    // Check alternative field names
     if (caseItem.assigned_investigator) {
       if (typeof caseItem.assigned_investigator === 'object' && caseItem.assigned_investigator.id === currentUser.id) {
         return true;
@@ -265,7 +332,6 @@ export default function Dashboard() {
       }
     }
     
-    // Check by username/email as fallback
     if (caseItem.investigator && typeof caseItem.investigator === 'object') {
       return caseItem.investigator.username === currentUser.username || 
              caseItem.investigator.email === currentUser.email;
@@ -274,26 +340,15 @@ export default function Dashboard() {
     return false;
   };
 
-  // UPDATED: Get display name for investigator - IMPROVED VERSION
   const getInvestigatorDisplayName = (caseItem) => {
-    console.log('🔍 Getting investigator display name for case:', caseItem);
-    
-    // Check primary investigator field
     if (caseItem.investigator) {
-      console.log('📋 Investigator field found:', caseItem.investigator);
-      
       if (typeof caseItem.investigator === 'object') {
         const name = `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim();
-        const result = name || caseItem.investigator.username || 'Unknown Investigator';
-        console.log('✅ Investigator name from object:', result);
-        return result;
+        return name || caseItem.investigator.username || 'Unknown Investigator';
       }
       
-      // If investigator is a string/number (ID), look up in users array
       if (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number') {
         const investigatorId = caseItem.investigator;
-        console.log('🔍 Looking up investigator ID in users:', investigatorId);
-        
         const foundUser = users.find(user => 
           user.id === investigatorId || 
           user.id === parseInt(investigatorId) ||
@@ -302,34 +357,23 @@ export default function Dashboard() {
         
         if (foundUser) {
           const name = `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim();
-          const result = name || foundUser.username || `Investigator ${investigatorId}`;
-          console.log('✅ Investigator found in users:', result);
-          return result;
+          return name || foundUser.username || `Investigator ${investigatorId}`;
         }
         
-        console.log('❌ Investigator not found in users, returning ID');
         return `Investigator ${investigatorId}`;
       }
       
       return caseItem.investigator;
     }
     
-    // Check alternative field names
     if (caseItem.assigned_investigator) {
-      console.log('📋 Assigned investigator field found:', caseItem.assigned_investigator);
-      
       if (typeof caseItem.assigned_investigator === 'object') {
         const name = `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim();
-        const result = name || caseItem.assigned_investigator.username || 'Unknown Investigator';
-        console.log('✅ Assigned investigator name from object:', result);
-        return result;
+        return name || caseItem.assigned_investigator.username || 'Unknown Investigator';
       }
       
-      // If assigned_investigator is an ID, look up in users array
       if (typeof caseItem.assigned_investigator === 'string' || typeof caseItem.assigned_investigator === 'number') {
         const investigatorId = caseItem.assigned_investigator;
-        console.log('🔍 Looking up assigned investigator ID in users:', investigatorId);
-        
         const foundUser = users.find(user => 
           user.id === investigatorId || 
           user.id === parseInt(investigatorId)
@@ -337,19 +381,15 @@ export default function Dashboard() {
         
         if (foundUser) {
           const name = `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim();
-          const result = name || foundUser.username || `Investigator ${investigatorId}`;
-          console.log('✅ Assigned investigator found in users:', result);
-          return result;
+          return name || foundUser.username || `Investigator ${investigatorId}`;
         }
         
-        console.log('❌ Assigned investigator not found in users, returning ID');
         return `Investigator ${investigatorId}`;
       }
       
       return caseItem.assigned_investigator;
     }
     
-    // Check if user is owner (for backward compatibility)
     if (caseItem.owner) {
       if (typeof caseItem.owner === 'object') {
         return caseItem.owner.username || 'Case Owner';
@@ -357,13 +397,10 @@ export default function Dashboard() {
       return caseItem.owner;
     }
     
-    console.log('❌ No investigator information found');
     return 'Not assigned';
   };
 
-  // NEW: Get investigator details for modal display
   const getInvestigatorDetails = (caseItem) => {
-    // Check primary investigator field
     if (caseItem.investigator && typeof caseItem.investigator === 'object') {
       return {
         name: `${caseItem.investigator.first_name || ''} ${caseItem.investigator.last_name || ''}`.trim(),
@@ -373,7 +410,6 @@ export default function Dashboard() {
       };
     }
     
-    // Check alternative field names
     if (caseItem.assigned_investigator && typeof caseItem.assigned_investigator === 'object') {
       return {
         name: `${caseItem.assigned_investigator.first_name || ''} ${caseItem.assigned_investigator.last_name || ''}`.trim(),
@@ -383,7 +419,6 @@ export default function Dashboard() {
       };
     }
     
-    // If investigator is just an ID, try to find the user details
     if (caseItem.investigator && (typeof caseItem.investigator === 'string' || typeof caseItem.investigator === 'number')) {
       const investigatorUser = users.find(user => 
         user.id === caseItem.investigator || 
@@ -409,7 +444,6 @@ export default function Dashboard() {
     return null;
   };
 
-  // NEW: Check if current user is the investigator (for display purposes)
   const isCurrentUserInvestigator = (caseItem) => {
     return isCaseInvestigator(caseItem);
   };
@@ -423,7 +457,8 @@ export default function Dashboard() {
         
         const formattedCases = casesData.map(caseItem => ({
           ...caseItem,
-          id: caseItem.case_id || caseItem.id
+          id: caseItem.case_id || caseItem.id,
+          districtName: getDistrictName(caseItem.district) // Add district name for display
         }));
         
         setCases(formattedCases);
@@ -468,14 +503,13 @@ export default function Dashboard() {
   };
 
   const getCriminalDisplayInfo = (record) => {
-    console.log('🔍 Processing criminal record:', record);
-    
     if (record.suspect_details) {
       return {
         criminal_name: record.suspect_details.criminal_name || 'Unknown',
         criminal_age: record.suspect_details.criminal_age,
         criminal_gender: record.suspect_details.criminal_gender,
         criminal_district: record.suspect_details.criminal_district,
+        criminal_district_name: getDistrictName(record.suspect_details.criminal_district), // Add district name
         photo: record.suspect_details.photo,
         aadhaar_number: record.suspect_details.aadhaar_number
       };
@@ -487,6 +521,7 @@ export default function Dashboard() {
         criminal_age: record.suspect.criminal_age,
         criminal_gender: record.suspect.criminal_gender,
         criminal_district: record.suspect.criminal_district,
+        criminal_district_name: getDistrictName(record.suspect.criminal_district), // Add district name
         photo: record.suspect.photo,
         aadhaar_number: record.suspect.aadhaar_number
       };
@@ -498,6 +533,7 @@ export default function Dashboard() {
         criminal_age: record.criminal_age || record.age,
         criminal_gender: record.criminal_gender || record.gender,
         criminal_district: record.criminal_district || record.district,
+        criminal_district_name: getDistrictName(record.criminal_district || record.district), // Add district name
         photo: record.photo,
         aadhaar_number: record.aadhaar_number
       };
@@ -508,6 +544,7 @@ export default function Dashboard() {
       criminal_age: null,
       criminal_gender: null,
       criminal_district: null,
+      criminal_district_name: 'N/A',
       photo: null,
       aadhaar_number: null
     };
@@ -580,8 +617,6 @@ export default function Dashboard() {
         "previous_offenses": "No prior offenses"
       };
 
-      console.log('Sending prediction data to backend:', predictionData);
-
       const response = await fetch('/api/predict/', {
         method: 'POST',
         headers: { 
@@ -597,7 +632,6 @@ export default function Dashboard() {
       }
 
       const predictionResult = await response.json();
-      console.log('Prediction result:', predictionResult);
       
       navigate('/prediction-results', { 
         state: { 
@@ -654,40 +688,6 @@ export default function Dashboard() {
     return <Badge bg={variant}>{status}</Badge>;
   };
 
-  const formatContactInfo = (contactInfo) => {
-    if (!contactInfo) return 'N/A';
-    
-    if (contactInfo.includes('@')) {
-      return (
-        <div>
-          <div>{contactInfo}</div>
-          <small>
-            <a href={`mailto:${contactInfo}`} className="text-decoration-none">
-              📧 Send Email
-            </a>
-          </small>
-        </div>
-      );
-    }
-    
-    const cleaned = contactInfo.replace(/\D/g, '');
-    if (cleaned.length === 10) {
-      const formattedPhone = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-      return (
-        <div>
-          <div>+91 {formattedPhone}</div>
-          <small>
-            <a href={`tel:+91${cleaned}`} className="text-decoration-none">
-              📞 Call
-            </a>
-          </small>
-        </div>
-      );
-    }
-    
-    return contactInfo;
-  };
-
   if (loading) {
     return (
       <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
@@ -696,48 +696,46 @@ export default function Dashboard() {
             <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
             <div className="ms-auto d-flex align-items-center">
               <button 
-              onClick={handleNotificationsClick}
-              className="btn btn-outline-secondary btn-sm me-2 position-relative"
-              title="Notifications"
-              style={{ border: 'none', background: 'transparent' }}
-            >
-              <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
-              
-              {/* Red circle with exclamation mark for new notifications */}
-              {hasNewNotifications && (
-                <div 
-                  className="position-absolute top-0 start-100 translate-middle"
-                  style={{
-                    width: '20px',
-                    height: '20px',
-                    backgroundColor: '#dc3545',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px solid white',
-                    animation: 'pulse 2s infinite'
-                  }}
-                >
-                  <i 
-                    className="bi bi-exclamation text-white" 
-                    style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
-                  ></i>
-                </div>
-              )}
-              
-              {/* Regular unread count badge */}
-              {unreadCount > 0 && !hasNewNotifications && (
-                <Badge 
-                  bg="danger" 
-                  pill 
-                  className="position-absolute top-0 start-100 translate-middle"
-                  style={{ fontSize: '0.6rem' }}
-                >
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Badge>
-              )}
-            </button>
+                onClick={handleNotificationsClick}
+                className="btn btn-outline-secondary btn-sm me-2 position-relative"
+                title="Notifications"
+                style={{ border: 'none', background: 'transparent' }}
+              >
+                <i className="bi bi-bell" style={{ fontSize: '1.2rem' }}></i>
+                
+                {hasNewNotifications && (
+                  <div 
+                    className="position-absolute top-0 start-100 translate-middle"
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      backgroundColor: '#dc3545',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid white',
+                      animation: 'pulse 2s infinite'
+                    }}
+                  >
+                    <i 
+                      className="bi bi-exclamation text-white" 
+                      style={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                    ></i>
+                  </div>
+                )}
+                
+                {unreadCount > 0 && !hasNewNotifications && (
+                  <Badge 
+                    bg="danger" 
+                    pill 
+                    className="position-absolute top-0 start-100 translate-middle"
+                    style={{ fontSize: '0.6rem' }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Badge>
+                )}
+              </button>
               <Link to="/profile" className="text-decoration-none me-3">
                 {profilePhoto ? (
                   <Image
@@ -774,7 +772,6 @@ export default function Dashboard() {
 
   return (
     <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', minHeight: '100vh' }}>
-      {/* Navigation Bar */}
       <Navbar bg="white" expand="lg" className="shadow-sm">
         <Container>
           <Navbar.Brand className="fw-bold text-primary">VigilAI</Navbar.Brand>
@@ -870,7 +867,6 @@ export default function Dashboard() {
             </div>
             <p className="text-muted">Manage and track all your cases in one place</p>
 
-            {/* Search and Filters */}
             <Card className="border-0 shadow-sm mb-4">
               <Card.Body>
                 <Form.Group className="mb-3">
@@ -938,8 +934,10 @@ export default function Dashboard() {
                         onChange={(e) => handleFilterChange('district', e.target.value)}
                       >
                         <option value="">All Districts</option>
-                        {getUniqueValues('district').map(district => (
-                          <option key={district} value={district}>District {district}</option>
+                        {getUniqueDistricts().map(district => (
+                          <option key={district.id} value={district.id}>
+                            {district.name}
+                          </option>
                         ))}
                       </Form.Select>
                     </Form.Group>
@@ -980,6 +978,7 @@ export default function Dashboard() {
                   const userCanEdit = isCaseInvestigator(c);
                   const isUserInvestigator = isCurrentUserInvestigator(c);
                   const investigatorDetails = getInvestigatorDetails(c);
+                  const districtName = getDistrictName(c.district); // Get district name
                   
                   return (
                     <Card 
@@ -1002,7 +1001,6 @@ export default function Dashboard() {
                             </h5>
                             <p className="text-muted mb-2">{c.description}</p>
                             
-                            {/* Investigator badge */}
                             <div className="mb-2">
                               <Badge 
                                 bg={isUserInvestigator ? "primary" : "outline-primary"} 
@@ -1031,7 +1029,8 @@ export default function Dashboard() {
                               </Badge>
                               {c.district && (
                                 <Badge bg="light" text="dark">
-                                  District {c.district}
+                                  {districtName} {/* Show district name instead of number */}
+                                  {c.district && <span className="text-muted ms-1">(D{c.district})</span>}
                                 </Badge>
                               )}
                               {c.ward && (
@@ -1045,7 +1044,6 @@ export default function Dashboard() {
                             className="d-flex gap-2 flex-wrap ms-3"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {/* ONLY SHOW EDIT/DELETE BUTTONS TO CASE INVESTIGATORS OR ADMINS */}
                             {userCanEdit && (
                               <>
                                 <Link 
@@ -1092,7 +1090,6 @@ export default function Dashboard() {
                                 </Button>
                               </>
                             )}
-                            
                           </div>
                         </div>
                       </Card.Body>
@@ -1130,7 +1127,6 @@ export default function Dashboard() {
           </Col>
         </Row>
 
-        {/* Stats Cards */}
         {cases.length > 0 && (
           <Row className="mt-5 justify-content-center">
             <Col lg={10}>
@@ -1172,15 +1168,13 @@ export default function Dashboard() {
             </Col>
           </Row>
         )}
-          <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1050 }}>
-            <Link to="/chat" className="btn btn-primary btn-lg rounded-circle shadow">
-              <i className="bi bi-chat-dots"></i>
-            </Link>
-          </div>
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1050 }}>
+          <Link to="/chat" className="btn btn-primary btn-lg rounded-circle shadow">
+            <i className="bi bi-chat-dots"></i>
+          </Link>
+        </div>
       </Container>
-      
 
-      {/* Case Details Modal - UPDATED INVESTIGATOR DISPLAY */}
       <Modal show={showCaseModal} onHide={() => setShowCaseModal(false)} size="xl" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
@@ -1190,7 +1184,6 @@ export default function Dashboard() {
         <Modal.Body>
           {selectedCase && (
             <div>
-              {/* Case Information */}
               <Card className="border-0 shadow-sm mb-4">
                 <Card.Body>
                   <h5 className="fw-bold mb-3">Case Information</h5>
@@ -1202,7 +1195,7 @@ export default function Dashboard() {
                       <p><strong>Location:</strong> {selectedCase.location_description || selectedCase.location || 'N/A'}</p>
                     </Col>
                     <Col md={6}>
-                      <p><strong>District:</strong> {selectedCase.district || 'N/A'}</p>
+                      <p><strong>District:</strong> {getDistrictName(selectedCase.district)}</p> {/* Updated */}
                       <p><strong>Ward:</strong> {selectedCase.ward || 'N/A'}</p>
                       <p><strong>Date & Time:</strong> {selectedCase.date_time ? new Date(selectedCase.date_time).toLocaleString() : 'N/A'}</p>
                       <p><strong>Investigator:</strong> 
@@ -1227,7 +1220,6 @@ export default function Dashboard() {
                 </Card.Body>
               </Card>
 
-              {/* Evidence Section */}
               <h6 className="fw-bold mb-3">Evidence</h6>
               {caseDetails[selectedCase.id]?.evidence?.length > 0 ? (
                 <Table striped bordered responsive size="sm" className="mb-4">
@@ -1260,7 +1252,6 @@ export default function Dashboard() {
                 <p className="text-muted mb-4">No evidence recorded.</p>
               )}
 
-              {/* Witnesses Section */}
               <h6 className="fw-bold mb-3">Witnesses</h6>
               {caseDetails[selectedCase.id]?.witnesses?.length > 0 ? (
                 <Table striped bordered responsive size="sm" className="mb-4">
@@ -1320,7 +1311,6 @@ export default function Dashboard() {
                 <p className="text-muted mb-4">No witness statements recorded.</p>
               )}
 
-              {/* Criminal Records Section */}
               <h6 className="fw-bold mb-3">Criminal Records</h6>
               {caseDetails[selectedCase.id]?.criminalRecords?.length > 0 ? (
                 <Table striped bordered responsive size="sm" className="mb-4">
@@ -1353,7 +1343,7 @@ export default function Dashboard() {
                           <td>{criminalInfo.criminal_age || 'N/A'}</td>
                           <td>{criminalInfo.criminal_gender || 'N/A'}</td>
                           <td>
-                            {criminalInfo.criminal_district ? `District ${criminalInfo.criminal_district}` : 'N/A'}
+                            {criminalInfo.criminal_district_name || getDistrictName(criminalInfo.criminal_district) || 'N/A'} {/* Updated */}
                           </td>
                           <td>
                             <div style={{ maxWidth: '200px' }}>
@@ -1386,10 +1376,7 @@ export default function Dashboard() {
             </div>
           )}
         </Modal.Body>
-        {/* REMOVED: Modal.Footer section with Close and Predict Suspects buttons */}
       </Modal>
-      
     </div>
-    
   );
 }

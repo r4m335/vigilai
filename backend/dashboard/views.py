@@ -90,7 +90,7 @@ class AdminCaseViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": "Invalid investigator_id"}, status=status.HTTP_404_NOT_FOUND)
 
         # HARD RULE: Admins cannot be investigators
-        if investigator.is_admin or investigator.is_superuser:
+        if investigator.is_superuser:
             return Response(
                 {"error": "Admins cannot be assigned as investigators"},
                 status=status.HTTP_400_BAD_REQUEST
