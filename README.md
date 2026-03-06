@@ -1,6 +1,3 @@
-I'll update the README.md to include the MIT License information:
-
-```markdown
 # VigilAI
 
 VigilAI is a full-stack case management and investigation support platform for law-enforcement style workflows. It combines a Django REST API backend, a React frontend, and optional ML-assisted suspect prediction endpoints.
