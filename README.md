@@ -1,3 +1,6 @@
+I'll update the README.md to include the MIT License information:
+
+```markdown
 # VigilAI
 
 VigilAI is a full-stack case management and investigation support platform for law-enforcement style workflows. It combines a Django REST API backend, a React frontend, and optional ML-assisted suspect prediction endpoints.
@@ -24,6 +27,7 @@ VigilAI is a full-stack case management and investigation support platform for l
 - SimpleJWT authentication
 - PostgreSQL (configured in settings)
 - drf-spectacular (API schema/docs)
+- ML libraries: pandas, numpy, joblib, lightgbm
 
 ### Frontend
 - React (Create React App)
@@ -43,20 +47,25 @@ VigilAI is a full-stack case management and investigation support platform for l
    ```bash
    cd backend
    python -m venv .venv
-   source .venv/bin/activate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. Install dependencies (if you do not yet have a lock/requirements file, install explicitly):
+2. Install dependencies using pip:
    ```bash
-   pip install django djangorestframework djangorestframework-simplejwt drf-spectacular drf-spectacular-sidecar django-cors-headers psycopg2-binary pandas numpy joblib lightgbm python-dateutil
+   pip install -r requirements.txt
+   ```
+   
+   Or install in editable mode using the pyproject.toml:
+   ```bash
+   pip install -e .
    ```
 
 3. Configure PostgreSQL credentials in `backend/backend/settings.py`:
-   - `NAME`
-   - `USER`
-   - `PASSWORD`
-   - `HOST`
-   - `PORT`
+   - `NAME`: Your database name
+   - `USER`: Your database user
+   - `PASSWORD`: Your database password
+   - `HOST`: Your database host (typically localhost)
+   - `PORT`: Your database port (typically 5432)
 
 4. Run migrations:
    ```bash
@@ -101,12 +110,12 @@ With the backend running:
 
 All backend endpoints are mounted under `/api/`:
 
-- Auth & profile: `/api/register/`, `/api/login/`, `/api/token/`, `/api/profile/`, `/api/users/`
-- Cases domain: `/api/cases/`, `/api/evidences/`, `/api/witnesses/`, `/api/criminals/`, `/api/criminal-records/`
-- Predictions: `/api/predict/`, `/api/predict/multiple/`, `/api/cases/<id>/generate_prediction/`
-- Search/stats: `/api/criminals/search/`, `/api/criminals/stats/`
-- Dashboard/admin: `/api/admin-dashboard/...`
-- Chat/notifications: `/api/chat/rooms/`, `/api/chat/messages/`, `/api/notifications/`
+- **Auth & profile**: `/api/register/`, `/api/login/`, `/api/token/`, `/api/profile/`, `/api/users/`
+- **Cases domain**: `/api/cases/`, `/api/evidences/`, `/api/witnesses/`, `/api/criminals/`, `/api/criminal-records/`
+- **Predictions**: `/api/predict/`, `/api/predict/multiple/`, `/api/cases/<id>/generate_prediction/`
+- **Search/stats**: `/api/criminals/search/`, `/api/criminals/stats/`
+- **Dashboard/admin**: `/api/admin-dashboard/...`
+- **Chat/notifications**: `/api/chat/rooms/`, `/api/chat/messages/`, `/api/notifications/`
 
 ## Running Tests
 
@@ -121,6 +130,56 @@ python manage.py test
 cd vigilai_frontend
 npm test
 ```
+
+## Backend Dependencies
+
+The backend uses the following main dependencies (as specified in `pyproject.toml` and `requirements.txt`):
+
+- Django >=5.2, <6.0
+- djangorestframework >=3.15, <4.0
+- djangorestframework-simplejwt >=5.3, <6.0
+- drf-spectacular >=0.27, <1.0
+- drf-spectacular-sidecar >=2024.1, <2027.0
+- django-cors-headers >=4.4, <5.0
+- psycopg2-binary >=2.9, <3.0
+- pandas >=2.2, <3.0
+- numpy >=1.26, <3.0
+- joblib >=1.4, <2.0
+- lightgbm >=4.5, <5.0
+- python-dateutil >=2.9, <3.0
+
+## License
+
+MIT License
+
+Copyright (c) 2026 MUHAMMED RAMEES M A
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Notes
+
+- CORS is configured for `http://localhost:3000` in backend settings.
+- Media uploads are served from `/media/` in development mode.
+
+## Contributors
+
+- MUHAMMED RAMEES M A (@r4m335)
 
 
 
